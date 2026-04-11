@@ -1,5 +1,5 @@
-This is a python library used to communicate with a robotic mower over a wifi-serial link.
-The library should be able to send various commands, as well as handling response messages. As the wifi connection can be unstable to the mower, the library needs to be able to handle situations such as retrying to send a command if there was no response.
+This is a python library used to communicate with a robotic mower over either a WiFi/UDP link or a USB-to-UART serial connection.
+The library sends commands and handles responses across both transports using a shared async client. As the connection can be unstable, the client automatically retries commands that time out.
 
 Various commands such as GetBatteryLevel, GetRemainingChargingTime or SetOverridePark can be sent to the mower. The commands and their responses can be used to understand the state of the mower, and to be able to control it or changing settings.
 
@@ -31,6 +31,8 @@ pip install -r requirements.txt
 
 ### Quick start
 
+#### WiFi
+
 ```python
 import asyncio
 from client import WifiSerialMower
@@ -55,7 +57,35 @@ async def main():
 asyncio.run(main())
 ```
 
-The client retries timed-out requests up to 3 times and ignores heartbeat broadcasts automatically.
+#### USB / UART
+
+```python
+import asyncio
+from uart_client import UartMower
+
+async def main():
+    mower = UartMower("/dev/ttyUSB0", baudrate=115200)  # Windows: "COM3"
+    await mower.connect()
+
+    print(await mower.battery_level())
+    await mower.disconnect()
+
+asyncio.run(main())
+```
+
+Both transports share the same `send_command`, `battery_level`, and `serial_number` API.
+The client retries timed-out requests up to 3 times.
+
+#### Subscribing to events
+
+The mower pushes unsolicited state/activity changes via the linked protocol.
+Register a callback with `on_event` before sending a subscribe command:
+
+```python
+mower.on_event(lambda event: print(event["name"], event["data"]))
+await mower.send_command("SubscribeMowerAppEvents")
+# callback fires whenever the mower reports a state or activity change
+```
 
 ### Testing with the mock mower
 
@@ -185,18 +215,24 @@ Examples:
 ```
 
 
-### Data structure/commmunication:
+### Client architecture
 
-Some UDP thread is writing into the data queue
+The client is built on `asyncio` and uses a non-blocking receive loop for both transports.
 
-The data queue is continiously processed where it is identified if:
-* There is a heartbeat
-* This is a command response (put it in the command response queue)
-* This is a linked command response (put in in the linked response queue)
-* This is a combination of multiple commands, if so break them up and put them in the queue once again.
+**WiFi:** `asyncio.DatagramProtocol.datagram_received` is called for each UDP datagram, which already contains a complete frame.
 
+**UART:** `asyncio.Protocol.data_received` appends bytes to an internal buffer. A frame accumulator uses the embedded length field to detect complete frames and extract them — this is more robust than scanning for the ETX byte, which can appear in payload data.
 
-If we send a command, we first flush/process anything in the command response queue, then send the command and await for anything to be put into the command response queue :)
+Once a complete frame is available, both transports call the shared `_dispatch_frame` method, which routes by the marker byte:
+
+| Marker | Meaning | Action |
+|--------|---------|--------|
+| `0x81` | Extended protocol response | Resolve the `asyncio.Future` registered for that transaction ID |
+| `0xfd` | Linked protocol event | Parse and dispatch to all `on_event` callbacks |
+| `< 0x80` | Simple protocol response | Resolve the single in-flight simple-command Future |
+| other | Heartbeat / unknown | Drop silently |
+
+Each `send_command` call creates a `Future` for its expected response and `await`s it with a configurable timeout. Extended protocol commands can be in-flight concurrently (each keyed by a unique random transaction ID). Simple protocol commands are serialised with an `asyncio.Lock` because the simple protocol has no transaction ID.
 
 
 
