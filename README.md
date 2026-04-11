@@ -23,6 +23,52 @@ An example of a command that have both request parameters and response parameter
 }
 ```
 
+### Installation
+
+```
+pip install -r requirements.txt
+```
+
+### Quick start
+
+```python
+import asyncio
+from client import WifiSerialMower
+
+async def main():
+    mower = WifiSerialMower(ip_addr="192.168.1.225", send_port=8081, receive_port=8080)
+    await mower.connect()
+
+    print(await mower.battery_level())   # e.g. 85  (percent)
+    print(await mower.serial_number())   # e.g. 12345678
+
+    # Any command from commands.json can be sent via send_command()
+    state = await mower.send_command("GetState")
+    mode  = await mower.send_command("GetMode")
+
+    # Commands with request parameters pass them as keyword arguments
+    await mower.send_command("SetMode", mode=1)
+    await mower.send_command("SetOverridePark", duration=3600)
+
+    await mower.disconnect()
+
+asyncio.run(main())
+```
+
+The client retries timed-out requests up to 3 times and ignores heartbeat broadcasts automatically.
+
+### Testing with the mock mower
+
+`mock_mower.py` runs a local UDP server that mimics a small subset of mower responses (GetSerialNumber, GetAllStatistics, GetBatteryLevel) and broadcasts a heartbeat every 3 seconds. Point the client at `127.0.0.1` to use it:
+
+```
+# terminal 1
+python mock_mower.py
+
+# terminal 2 — the client's __main__ block already targets 127.0.0.1
+python client.py
+```
+
 ### Simple and extended protocol and linked package types
 There are three different protocols available:
 
@@ -54,9 +100,9 @@ For example, `021401014e03` is the request for simple GetBatteryData (20, 1):
 | STX | MSGTYPE | LEN | PLD | CRC | ETX |
 ```
 #### Example with extended protocol 
-For example, `0281070000900a0114d103` is the request for GetBatteryLevel (4106, 20) with the Transaction ID as `0`
+For example, `0281070042900a0114d103` is the request for GetBatteryLevel (4106, 20) with a Transaction ID of `0x42` (random per request):
 ```
-| 02  | 81  | 07  00 | 00   | 90  0a  | 01  | 14  | d1  | 03  |
+| 02  | 81  | 07  00 | 42   | 90  0a  | 01  | 14  | d1  | 03  |
 | STX | PEM | NBYTES | T ID | MSGTYPE | LEN | PLD | CRC | ETX |
 ```
 

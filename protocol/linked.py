@@ -13,7 +13,7 @@ class LinkedProtocol(Protocol):
             super().__init__(command)
 
     def generate_request(self, **kwargs):
-        raise NotImplementedError("Not yey implemented")
+        raise NotImplementedError("Not yet implemented")
         
     def parse_response(self, response: bytearray) -> dict:
         """

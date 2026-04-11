@@ -11,6 +11,7 @@ class WifiSerialMower:
         self.send_port = send_port
         self.receive_port = receive_port
         self.sock = None
+        self._pending: dict[int, str] = {}  # transaction_id -> command_name
 
     async def connect(self):
         """Connect to the mower"""
@@ -24,26 +25,35 @@ class WifiSerialMower:
             self.sock.close()
             self.sock = None
 
-    async def get_response(self, request: bytearray):
-        """Send a request and wait for a response"""
+    async def get_response(self, request: bytearray, retries: int = 3, retry_delay: float = 0.5):
+        """Send a request and wait for a response, retrying on timeout."""
         if not self.sock:
             raise ConnectionError("Socket is not connected")
 
-        try:
-            self.sock.sendto(request, (self.ip_addr, self.send_port))
-        except ConnectionResetError as e:
-            logger.error(f"Connection reset while sending data: {e}")
-            return None
+        for attempt in range(retries):
+            try:
+                self.sock.sendto(request, (self.ip_addr, self.send_port))
+            except ConnectionResetError as e:
+                logger.error(f"Connection reset while sending data: {e}")
+                return None
 
-        try:
-            response, _ = self.sock.recvfrom(1024)
-            return response
-        except socket.timeout:
-            logger.warning("No response received (timeout)")
-            return None
-        except ConnectionResetError as e:
-            logger.error(f"Connection reset while receiving data: {e}")
-            return None
+            try:
+                while True:
+                    response, _ = self.sock.recvfrom(1024)
+                    # Skip non-protocol packets (e.g. heartbeat broadcasts)
+                    if len(response) > 0 and response[0] == 0x02:
+                        return response
+                    logger.debug(f"Skipping non-protocol packet: {response!r}")
+            except socket.timeout:
+                if attempt < retries - 1:
+                    logger.warning(f"No response (timeout), retrying ({attempt + 1}/{retries - 1})...")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.warning("No response received after all retries (timeout)")
+                    return None
+            except ConnectionResetError as e:
+                logger.error(f"Connection reset while receiving data: {e}")
+                return None
 
     async def send_command(self, command_name: str, **kwargs):
         """
@@ -52,17 +62,28 @@ class WifiSerialMower:
         """
         command = create_command(command_name)
         request = command.generate_request(**kwargs)
+
+        tid = command.transaction_id
+        if tid is not None:
+            self._pending[tid] = command_name
+
         response = await self.get_response(request)
         if response is None:
+            if tid is not None:
+                self._pending.pop(tid, None)
             return None
-        
-
-        #if command.validate_response(response) is False:
-        #    logger.warning("Response failed validation")
 
         response_dict = command.parse_response(response)
+
+        if tid is not None:
+            resp_tid = response_dict.get("transaction_id")
+            if resp_tid is not None and resp_tid != tid:
+                logger.warning(
+                    f"Transaction ID mismatch for '{command_name}': sent {tid:#04x}, got {resp_tid:#04x}"
+                )
+            self._pending.pop(tid, None)
+
         response_data = response_dict.get("data", None)
-        #response_dict = response
         if (
             response_data is not None and len(response_data) == 1
         ):  # If there is only one key in the response, return the value

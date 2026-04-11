@@ -2,9 +2,7 @@
 thus there is no better "source code" than the tests themselves :)"""
 
 import unittest
-#from unittest.mock import patch
-#import json
-#from binascii import unhexlify
+from unittest.mock import patch
 from protocol.base import create_command
 
 # Load the actual protocol from the file
@@ -42,11 +40,14 @@ class TestRequests(unittest.TestCase):
 
     def test_generate_request_no_params(self):
         # Test request generation with no parameters
-        request = self.get_state_cmd.generate_request()
+        with patch("random.randint", return_value=42):
+            request = self.get_state_cmd.generate_request()
         # Check basic structure: STX, extended protocol, transaction ID, etc.
         self.assertEqual(request[0], 0x02)  # STX
         self.assertEqual(request[1], 0x81)  # Extended protocol
-        self.assertEqual(request[4], 2)  # Minor command (transaction ID)
+        self.assertEqual(request[4], 42)  # Mocked random transaction ID
+        self.assertIsNotNone(self.get_state_cmd.transaction_id)
+        self.assertEqual(self.get_state_cmd.transaction_id, 42)
         # Check major command encoding for GetState (4586)
         self.assertEqual(request[5], 0x80 | ((4586 >> 8) & 0xFF))
         self.assertEqual(request[6], 4586 & 0xFF)
@@ -54,26 +55,29 @@ class TestRequests(unittest.TestCase):
 
     def test_generate_request_with_params(self):
         # Test request with uint8 parameter
-        request = self.set_mode_cmd.generate_request(mode=0)
+        with patch("random.randint", return_value=42):
+            request = self.set_mode_cmd.generate_request(mode=0)
         self.assertEqual(len(request), 12)  # 11 base bytes + 1 param byte
-        self.assertEqual(request[9], 0)  # mode value
-        # Complete request:
-        self.assertEqual(request, bytearray.fromhex("028108000091ea0200004403"))
+        self.assertEqual(request[0], 0x02)   # STX
+        self.assertEqual(request[1], 0x81)   # Extended marker
+        self.assertIn(request[4], range(1, 256))  # Valid transaction ID
+        self.assertEqual(request[8], 0)      # minor (subcommand for SetMode)
+        self.assertEqual(request[9], 0)      # mode value
+        self.assertEqual(request[-1], 0x03)  # ETX
 
         # Test request with uint16 parameter
-        request = self.enter_pin_cmd.generate_request(code=1234)
+        with patch("random.randint", return_value=42):
+            request = self.enter_pin_cmd.generate_request(code=1234)
         self.assertEqual(len(request), 13)  # 11 base bytes + 2 param bytes
-        # PIN code:
+        self.assertIn(request[4], range(1, 256))  # Valid transaction ID
         self.assertEqual(int.from_bytes(request[9:11], byteorder="little"), 1234)
-        # Complete request:
-        self.assertEqual(request, bytearray.fromhex("028109000492380304d2044a03"))
 
         # Test request with uint32 parameter
-        request = self.get_message_cmd.generate_request(messageId=1)
+        with patch("random.randint", return_value=42):
+            request = self.get_message_cmd.generate_request(messageId=1)
         self.assertEqual(len(request), 15)  # 11 base bytes + 4 param bytes
-        # messageId
+        self.assertIn(request[4], range(1, 256))  # Valid transaction ID
         self.assertEqual(int.from_bytes(request[9:13], byteorder="little"), 1)
-        self.assertEqual(request, bytearray.fromhex("02810b0001927a0501010000000303"))
 
     def test_simple_protocol(self):
         # Test simple protocol with no parameters

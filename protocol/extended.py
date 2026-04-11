@@ -1,5 +1,6 @@
+import random
 from protocol.common import Protocol, crc
-# This is the extended protocol implementation 
+# This is the extended protocol implementation
 
 
 class ExtendedProtocol(Protocol):
@@ -29,9 +30,9 @@ class ExtendedProtocol(Protocol):
         self.request_data[2] = remaining_bytes & 0xFF
         self.request_data[3] = (remaining_bytes >> 8) & 0xFF
 
-        # Transaction ID, but we set this as the subCommand so that it is returned by the Automower
-        #self.request_data[4] = self.minor
-        self.request_data[4] = 0x00
+        # Transaction ID: semi-random token used to correlate responses to requests
+        self.transaction_id = random.randint(1, 255)
+        self.request_data[4] = self.transaction_id
 
         # Major command aka. Message Type. Some big endian wtf here
         self.request_data[5] = ((self.major | 0x8000) >> 8) & 0xFF
@@ -74,6 +75,7 @@ class ExtendedProtocol(Protocol):
             raise ValueError("CRC mismatch in response")
 
         return {
+            "transaction_id": response[4],
             "status": response[8],
             "data": self.parse_data(response[9 : 9 + data_length - 7]),
         }

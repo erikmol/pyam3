@@ -10,6 +10,7 @@ class Protocol:
         self.response_data_type = command["responseType"]
         self.request_length = command["requestLength"]
         self.response_length = command["responseLength"]
+        self.transaction_id: int | None = None
 
     def prepare_payload_data(self, **kwargs) -> bytearray:
         payload_data = bytearray()
