@@ -8,6 +8,11 @@ from client import Mower
 
 logger = logging.getLogger(__name__)
 
+# Largest plausible mower frame in bytes.  A corrupted length field could
+# otherwise cause the accumulator to wait indefinitely for data that never
+# arrives.  All known mower frames are well under 100 bytes.
+MAX_FRAME_SIZE = 512
+
 
 # ── UART frame accumulator ────────────────────────────────────────────────────
 
@@ -86,6 +91,14 @@ class _UartProtocol(asyncio.Protocol):
             frame_len = _frame_length(self._buffer)
             if frame_len is None:
                 return  # need more bytes to read the length field
+
+            if frame_len > MAX_FRAME_SIZE:
+                logger.warning(
+                    "Implausible frame length %d (max %d), discarding STX and resyncing",
+                    frame_len, MAX_FRAME_SIZE,
+                )
+                del self._buffer[0]  # drop the bad STX and rescan
+                continue
 
             if len(self._buffer) < frame_len:
                 return  # frame is incomplete — wait for more data
