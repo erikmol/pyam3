@@ -45,15 +45,20 @@ class Protocol:
         dpos = 0
         for name, dtype in self.response_data_type.items():
             if (dtype == "tUnixTime") or (dtype == "uint32"):
+                if dpos + 4 > len(data):
+                    raise ValueError(
+                        f"Response too short: need 4 bytes at offset {dpos} for field '{name}', but data is only {len(data)} bytes"
+                    )
                 response[name] = int.from_bytes(
                     data[dpos : dpos + 4], byteorder="little"
                 )
                 dpos += 4
             elif (dtype == "uint16") or (dtype == "sint16"):
-                if dtype == "sint16":
-                    signed = True
-                else:
-                    signed = False
+                if dpos + 2 > len(data):
+                    raise ValueError(
+                        f"Response too short: need 2 bytes at offset {dpos} for field '{name}', but data is only {len(data)} bytes"
+                    )
+                signed = dtype == "sint16"
                 response[name] = int.from_bytes(
                     data[dpos : dpos + 2],
                     byteorder="little",
@@ -61,6 +66,10 @@ class Protocol:
                 )
                 dpos += 2
             elif (dtype == "uint8") or (dtype == "bool"):
+                if dpos >= len(data):
+                    raise ValueError(
+                        f"Response too short: expected byte at offset {dpos} for field '{name}', but data is only {len(data)} bytes"
+                    )
                 response[name] = data[dpos]
                 dpos += 1
             else:
