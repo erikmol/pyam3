@@ -87,6 +87,68 @@ await mower.send_command("SubscribeMowerAppEvents")
 # callback fires whenever the mower reports a state or activity change
 ```
 
+### Bench testing over USB-UART
+
+Two scripts in `scripts/` are provided for function-testing a mower connected via a USB-to-UART adapter, without needing to run the mower.
+
+#### `scripts/bench_test.py`
+
+Exercises all safe read-only commands in sequence and writes a timestamped JSONL log with parsed results and raw frames. The raw frames can be used later to build a response emulator or write regression tests against real hardware.
+
+```
+python scripts/bench_test.py --port COM3
+python scripts/bench_test.py --port /dev/ttyUSB0 --baud 115200 --interval 10
+```
+
+Options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port` | required | Serial port, e.g. `COM3` or `/dev/ttyUSB0` |
+| `--baud` | `115200` | Baud rate |
+| `--log-dir` | `logs/` | Directory for JSONL log files |
+| `--interval` | `0` | Repeat every N seconds; `0` = one-shot |
+
+After connecting the script subscribes to mower events so any unsolicited pushes (state changes, activity changes) also land in the log.
+
+Each log entry is a JSON object on one line:
+
+```jsonc
+// Polled command
+{"type": "command", "timestamp": "…", "command": "GetBatteryLevel",
+ "status": "ok", "result": 72,
+ "frames": [{"direction": "tx", "t": "…", "hex": "0281…03"},
+             {"direction": "rx", "t": "…", "hex": "0281…03"}]}
+
+// Unsolicited frame (heartbeat, event, unknown)
+{"type": "unsolicited", "timestamp": "…", "marker": "0xfd", "hex": "02fd…03"}
+
+// Parsed linked-protocol event (fires alongside the unsolicited entry)
+{"type": "event", "timestamp": "…", "name": "StateEvent", "data": {"response": 7}}
+```
+
+#### `scripts/event_monitor.py`
+
+Passive listener — subscribes to mower events and logs all unsolicited traffic without sending any polling commands. Useful for observing the mower while it charges or idles on the bench.
+
+```
+python scripts/event_monitor.py --port COM3
+python scripts/event_monitor.py --port COM3 --duration 120
+```
+
+Options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port` | required | Serial port |
+| `--baud` | `115200` | Baud rate |
+| `--log-dir` | `logs/` | Directory for JSONL log files |
+| `--duration` | `0` | Stop after N seconds; `0` = run until Ctrl-C |
+
+#### Frame capture (`scripts/logging_mower.py`)
+
+Both scripts share `LoggingUartMower`, a thin subclass of `UartMower` that intercepts `_dispatch_frame` and `_send_bytes` to record every raw byte exchange. Unsolicited frames — heartbeats, events, or anything with no matching pending future — are captured here too, before the base class silently drops them.
+
 ### Testing with the mock mower
 
 `mock_mower.py` runs a local UDP server that mimics a small subset of mower responses (GetSerialNumber, GetAllStatistics, GetBatteryLevel) and broadcasts a heartbeat every 3 seconds. Point the client at `127.0.0.1` to use it:
