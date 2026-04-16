@@ -190,7 +190,11 @@ class Mower(ABC):
             if not sf.done():
                 sf.set_result(frame)
 
-        # ── Anything else (heartbeats, unknown markers) ───────────────────────
+        # ── AMG3_PROTOCOL_EXTENDEDPSK (0xFE marker) — not yet supported ─────────
+        elif marker == 0xFE:
+            logger.warning("Received AMG3_PROTOCOL_EXTENDEDPSK frame (0xFE) — not supported, dropping")
+
+        # ── Anything else ─────────────────────────────────────────────────────
         else:
             logger.debug("Unknown frame marker=0x%02x, dropping", marker)
 

@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch
 # in environments where pyserial-asyncio is not installed.
 sys.modules.setdefault("serial_asyncio", MagicMock())
 
-from client import Mower                                    # noqa: E402
-from uart_client import _UartProtocol, _frame_length, MAX_FRAME_SIZE  # noqa: E402
+from client import Mower, _frame_length, MAX_FRAME_SIZE     # noqa: E402
+from uart_client import _UartProtocol                       # noqa: E402
 from protocol.common import crc                             # noqa: E402
 
 
@@ -135,7 +135,7 @@ class TestUartAccumulator(unittest.TestCase):
         proto, frames = self._make_protocol()
         proto.data_received(bytes([0xAA, 0xBB, 0xCC]))
         self.assertEqual(frames, [])
-        self.assertEqual(len(proto._buffer), 0)
+        self.assertEqual(len(proto._accumulator._buf), 0)
 
     def test_etx_byte_in_payload_does_not_truncate_frame(self):
         # EXTENDED_FRAME has 0x03 (ETX) at byte[4] (the transaction ID).
@@ -164,9 +164,9 @@ class TestUartAccumulator(unittest.TestCase):
     def test_connection_lost_clears_buffer(self):
         proto, frames = self._make_protocol()
         proto.data_received(EXTENDED_FRAME[:4])         # partial frame
-        self.assertGreater(len(proto._buffer), 0)
+        self.assertGreater(len(proto._accumulator._buf), 0)
         proto.connection_lost(None)
-        self.assertEqual(len(proto._buffer), 0)
+        self.assertEqual(len(proto._accumulator._buf), 0)
 
     def test_three_different_protocol_frames_in_sequence(self):
         proto, frames = self._make_protocol()
@@ -247,9 +247,15 @@ class TestDispatchFrame(unittest.IsolatedAsyncioTestCase):
         mower._simple_future = None
         mower._dispatch_frame(SIMPLE_FRAME)
 
+    async def test_psk_frame_logs_warning_and_does_not_raise(self):
+        mower = _MockMower()
+        with self.assertLogs("client", level="WARNING") as log:
+            mower._dispatch_frame(bytearray([0x02, 0xFE, 0x00, 0x03]))
+        self.assertTrue(any("0xFE" in msg or "PSK" in msg for msg in log.output))
+
     async def test_unknown_marker_does_not_raise(self):
         mower = _MockMower()
-        # 0x90 >= 0x80 but not 0x81 or 0xFD
+        # 0x90 >= 0x80 but not 0x81, 0xFD, or 0xFE
         mower._dispatch_frame(bytearray([0x02, 0x90, 0x00, 0x03]))
 
     async def test_frame_too_short_does_not_raise(self):

@@ -1,6 +1,50 @@
 import crcmod.predefined
 crc = crcmod.predefined.mkPredefinedCrcFun("crc-8-maxim")
 
+
+# AMG3 command result codes (from amg3.h)
+AMG3_CMD_OK              = 0
+AMG3_CMD_ERR_UNKNOWN     = 1
+AMG3_CMD_ERR_VALUE       = 2
+AMG3_CMD_ERR_RANGE       = 3
+AMG3_CMD_ERR_NOTAVAIL    = 4
+AMG3_CMD_ERR_ACCESS      = 5
+AMG3_CMD_ERR_GROUP       = 6
+AMG3_CMD_ERR_ID          = 7
+AMG3_CMD_ERR_BUSY        = 8
+AMG3_CMD_ERR_INVALID_PIN = 9
+AMG3_CMD_ERR_MOWER_BLOCKED = 10
+
+_AMG3_ERR_NAMES = {
+    AMG3_CMD_ERR_UNKNOWN:       "ERR_UNKNOWN",
+    AMG3_CMD_ERR_VALUE:         "ERR_VALUE",
+    AMG3_CMD_ERR_RANGE:         "ERR_RANGE",
+    AMG3_CMD_ERR_NOTAVAIL:      "ERR_NOTAVAIL",
+    AMG3_CMD_ERR_ACCESS:        "ERR_ACCESS",
+    AMG3_CMD_ERR_GROUP:         "ERR_GROUP",
+    AMG3_CMD_ERR_ID:            "ERR_ID",
+    AMG3_CMD_ERR_BUSY:          "ERR_BUSY",
+    AMG3_CMD_ERR_INVALID_PIN:   "ERR_INVALID_PIN",
+    AMG3_CMD_ERR_MOWER_BLOCKED: "ERR_MOWER_BLOCKED",
+}
+
+
+class MowerNotReadyError(Exception):
+    """Raised when the mower responds with a 0x7F msgType high byte.
+
+    Indicates the mower received the command but could not process it,
+    typically because it is asleep or still waking up (AMG3_CMD_ERR_UNKNOWN).
+    """
+
+
+class MowerCommandError(Exception):
+    """Raised when the mower returns a non-OK AMG3 status code in a response."""
+
+    def __init__(self, code: int) -> None:
+        self.code = code
+        name = _AMG3_ERR_NAMES.get(code, f"ERR_0x{code:02X}")
+        super().__init__(f"Mower command error: {name} (code={code})")
+
 class Protocol:
     def __init__(self, command:dict)->None:
         self.name = command['name']

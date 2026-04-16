@@ -4,6 +4,7 @@ thus there is no better "source code" than the tests themselves :)"""
 import unittest
 from unittest.mock import patch
 from protocol.base import create_command
+from protocol.common import crc, MowerNotReadyError, MowerCommandError
 
 # Load the actual protocol from the file
 # with open("protocol.json", "r") as f:
@@ -140,6 +141,44 @@ class TestResponse(unittest.TestCase):
         # Test invalid CRC
         with self.assertRaises(ValueError):
             command.parse_response(bytearray.fromhex("028108000392390200001103"))
+
+    def test_parse_response_mower_not_ready(self):
+        command = create_command("IsOperatorLoggedIn")
+        # Sleeping response: msgType high byte = 0x7F
+        frame = bytearray.fromhex("02810600e97f01020a03")
+        with self.assertRaises(MowerNotReadyError):
+            command.parse_response(frame)
+
+    def test_parse_response_command_error_busy(self):
+        command = create_command("IsOperatorLoggedIn")
+        frame = bytearray.fromhex("02810800039239020000da03")
+        frame[8] = 8  # AMG3_CMD_ERR_BUSY
+        frame[-2] = crc(frame[1:-2])
+        with self.assertRaises(MowerCommandError) as ctx:
+            command.parse_response(frame)
+        self.assertEqual(ctx.exception.code, 8)
+
+    def test_parse_response_command_error_notavail(self):
+        command = create_command("IsOperatorLoggedIn")
+        frame = bytearray.fromhex("02810800039239020000da03")
+        frame[8] = 4  # AMG3_CMD_ERR_NOTAVAIL
+        frame[-2] = crc(frame[1:-2])
+        with self.assertRaises(MowerCommandError) as ctx:
+            command.parse_response(frame)
+        self.assertEqual(ctx.exception.code, 4)
+
+    def test_parse_response_command_error_has_readable_message(self):
+        command = create_command("IsOperatorLoggedIn")
+        frame = bytearray.fromhex("02810800039239020000da03")
+        frame[8] = 8
+        frame[-2] = crc(frame[1:-2])
+        exc = None
+        try:
+            command.parse_response(frame)
+        except MowerCommandError as e:
+            exc = e
+        self.assertIsNotNone(exc)
+        self.assertIn("ERR_BUSY", str(exc))
 
     def test_simple_protocol_responses(self):
         command = create_command("GetSensorData")

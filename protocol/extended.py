@@ -1,5 +1,5 @@
 import random
-from protocol.common import Protocol, crc
+from protocol.common import Protocol, crc, MowerNotReadyError, MowerCommandError, AMG3_CMD_OK
 # This is the extended protocol implementation
 
 
@@ -55,9 +55,14 @@ class ExtendedProtocol(Protocol):
         """
         if response[0] != 0x02 or response[-1] != 0x03:
             raise ValueError("Invalid response format")
-        
+
         if response[1] != 0x81:
             raise ValueError("Not extended protocol marker")
+
+        if response[5] == 0x7F:
+            raise MowerNotReadyError(
+                f"Mower not ready (msgType high=0x7F, err=0x{response[6]:02X})"
+            )
 
 
         # Extract data
@@ -73,6 +78,10 @@ class ExtendedProtocol(Protocol):
         # Check CRC
         if crc(response[1:-2]) != response[-2]:
             raise ValueError("CRC mismatch in response")
+
+        status = response[8]
+        if status != AMG3_CMD_OK:
+            raise MowerCommandError(status)
 
         return {
             "transaction_id": response[4],
