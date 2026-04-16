@@ -1,158 +1,140 @@
-# ESP32 WiFi Bridge — Implementation Requirements
+# ESP32 WiFi Bridge
 
-The ESP32 acts as a **transparent TCP↔UART bridge** between the Python client
-(`WifiSerialMower`) and the mower's physical UART interface.  It does **not**
-parse or interpret mower protocol frames — it forwards bytes in both directions,
-with one exception: the bridge-layer heartbeat (PING/PONG) is handled locally
-and must not be forwarded to the mower.
+The ESP32 bridge is implemented as an **ESPHome custom component** located in
+`esphome/`.  It turns any ESP32 into a transparent TCP↔UART bridge between the
+Python client (`WifiSerialMower`) and the mower's physical serial interface.
+
+---
+
+## Quick start
+
+```bash
+pip install esphome
+
+# Copy and edit secrets
+cp esphome/secrets.yaml.example esphome/secrets.yaml
+$EDITOR esphome/secrets.yaml
+
+# First flash (USB)
+esphome run esphome/mower_bridge.yaml
+
+# Subsequent updates (OTA, once on WiFi)
+esphome run esphome/mower_bridge.yaml
+```
+
+The bridge is reachable at **`mower-bridge.local:8080`** once connected to WiFi.
+
+To connect the Python client:
+
+```python
+from client import WifiSerialMower
+mower = WifiSerialMower("mower-bridge.local", port=8080)
+```
+
+---
+
+## Hardware
+
+| Signal | ESP32 pin | Notes |
+|--------|-----------|-------|
+| UART TX | GPIO17 | → mower RX |
+| UART RX | GPIO16 | ← mower TX |
+| GND | GND | common ground required |
+
+Adjust pins in `esphome/mower_bridge.yaml` under the `uart:` section.
+Avoid GPIO1/GPIO3 (UART0, used by USB-Serial for flashing).
 
 ---
 
 ## Architecture
 
 ```
-[Python host]  ──TCP 8080──►  [ESP32]  ──UART 115200──►  [Mower]
-[Python host]  ◄──TCP 8080──  [ESP32]  ◄──UART 115200──  [Mower]
+[Python host]  ──TCP 8080──►  [ESP32 ESPHome]  ──UART 115200──►  [Mower]
+[Python host]  ◄──TCP 8080──  [ESP32 ESPHome]  ◄──UART 115200──  [Mower]
 ```
 
----
+The component (`mower_bridge.cpp`) runs inside ESPHome's cooperative `loop()`:
 
-## TCP Server
-
-| Parameter | Value |
-|-----------|-------|
-| Role | TCP server (ESP32 listens, Python connects) |
-| Port | **8080** (configurable) |
-| Clients | One at a time; close and re-`accept()` on disconnect |
-| Keepalive | Enable `SO_KEEPALIVE` on the accepted socket |
-| Addressing | Use a static IP or advertise via mDNS as `mower-bridge.local` |
-
-**Accept loop behaviour:**
-
-1. Listen on port 8080.
-2. Accept one client connection.
-3. Forward data bidirectionally until the client disconnects or an error occurs.
-4. Close the socket and return to step 1 immediately — do not delay.
+| Direction | Behaviour |
+|-----------|-----------|
+| TCP → UART | Accumulates a full STX…ETX frame, intercepts PING heartbeat, forwards everything else to UART |
+| UART → TCP | Drains the UART RX buffer and forwards raw bytes to the TCP client (Python handles reassembly) |
 
 ---
 
-## UART Interface
+## Bridge-layer heartbeat
 
-| Parameter | Value |
-|-----------|-------|
-| Baud rate | 115 200 |
-| Data bits | 8 |
-| Parity | None |
-| Stop bits | 1 |
-| Flow control | None |
-| Pins | UART1 — configure TX/RX explicitly (avoid UART0, used by USB-Serial) |
-
----
-
-## Frame Forwarding
-
-The mower protocol uses STX (`0x02`) / ETX (`0x03`) framing with an embedded
-length field.  The ESP32 **must** accumulate a complete frame before forwarding
-it, for two reasons:
-
-1. To identify and discard heartbeat frames before they reach the mower.
-2. To avoid sending partial frames over UART after a TCP reconnect.
-
-### Frame length calculation
-
-```c
-int frame_length(const uint8_t *buf, int available) {
-    if (available < 3) return -1;          // need more bytes
-    uint8_t marker = buf[1];
-    if (marker == 0x81 || marker == 0xFD) {
-        if (available < 4) return -1;
-        uint16_t remaining = buf[2] | (buf[3] << 8);
-        return (int)remaining + 4;         // Extended / Linked
-    }
-    return (int)buf[2] + 5;               // Simple protocol
-}
-```
-
-### Forwarding rules
-
-| Direction | Action |
-|-----------|--------|
-| TCP → UART | Accumulate a full frame. If it is a PING heartbeat, reply with PONG over TCP and discard. Otherwise write the frame to UART. |
-| UART → TCP | Accumulate a full frame. Forward it as-is over TCP. |
-
----
-
-## Bridge-Layer Heartbeat
-
-The Python client sends a periodic PING to verify the bridge is alive (not
-just that the TCP socket is open).  The bridge must respond with PONG without
-forwarding either frame to the mower.
+The Python client sends a periodic PING to verify the bridge is alive beyond
+the TCP keepalive.  The component replies with PONG without touching the UART.
 
 | Frame | Bytes (hex) |
 |-------|-------------|
-| PING (client → bridge) | `02 50 49 4E 47 03` |
-| PONG (bridge → client) | `02 50 4F 4E 47 03` |
+| PING (Python → bridge) | `02 50 49 4E 47 03` |
+| PONG (bridge → Python) | `02 50 4F 4E 47 03` |
 
-Detection: if `buf[0] == 0x02 && buf[1] == 0x50`, it is a heartbeat frame.
-Length is always 6 bytes.
-
-The Python client sends a PING every **10 s** and waits up to **5 s** for a
-PONG.  A missing PONG triggers a reconnect on the Python side, so the bridge
-does not need its own reconnect logic for the TCP side — just re-`accept()`.
+Python sends a PING every 10 s and expects a PONG within 5 s; a missing PONG
+triggers an automatic reconnect.
 
 ---
 
-## Watchdog
+## Component files
 
-If no bytes are received from the mower UART for **30 s** while a TCP client
-is connected, reset the UART peripheral (re-initialise baud rate and pins).
-This recovers from UART hangs without requiring a full ESP32 reboot.
-
-A hardware watchdog timer should also be enabled with a **60 s** timeout to
-recover from firmware lockups.
-
----
-
-## Network Configuration
-
-| Option | Recommendation |
-|--------|---------------|
-| WiFi mode | Station (STA) — connect to home network |
-| IP assignment | Static IP preferred; DHCP with reserved lease is acceptable |
-| mDNS hostname | `mower-bridge` → resolves as `mower-bridge.local` |
-| DNS-SD service | Advertise `_mower._tcp` on port 8080 for future auto-discovery |
-
-Do **not** use SoftAP mode in production — it creates an open access point
-that anyone nearby could connect to.
+```
+esphome/
+├── mower_bridge.yaml              # ESPHome device configuration
+└── components/
+    └── mower_bridge/
+        ├── __init__.py            # ESPHome codegen schema
+        ├── mower_bridge.h         # Component header
+        └── mower_bridge.cpp       # TCP server + frame forwarding logic
+```
 
 ---
 
-## Build Requirements
+## Frame length calculation
 
-| Component | Minimum |
-|-----------|---------|
-| SDK | ESP-IDF ≥ 5.1 or Arduino ESP32 core ≥ 3.0 |
-| Chip | ESP32, ESP32-S3, or ESP32-C3 (any with WiFi + UART1) |
-| Flash | 4 MB (OTA requires 2 × app partitions) |
-| RAM | 256 KB DRAM sufficient |
-| OTA | Recommended — enables firmware updates without physical access |
+The component uses the same logic as the Python `_frame_length()` helper to
+determine when a complete mower frame has been received from TCP:
 
-Relevant ESP-IDF components: `esp_wifi`, `esp_netif`, `mdns`, `lwip` (sockets),
-`driver/uart`.
+```c
+// Extended / Linked (marker 0x81 or 0xFD):  total = remaining_LE + 4
+// Simple (any other marker):                 total = payload_len  + 5
+int frame_length(const uint8_t *buf, size_t avail) {
+    if (avail < 3) return -1;
+    uint8_t marker = buf[1];
+    if (marker == 0x81 || marker == 0xFD) {
+        if (avail < 4) return -1;
+        uint16_t remaining = buf[2] | (buf[3] << 8);
+        return (int)remaining + 4;
+    }
+    return (int)buf[2] + 5;
+}
+```
 
 ---
 
-## Implementation Checklist
+## Configuration reference
 
-- [ ] WiFi station connect with auto-reconnect
-- [ ] mDNS hostname advertisement
-- [ ] TCP server accept loop (single client)
-- [ ] `SO_KEEPALIVE` on accepted socket
-- [ ] Frame accumulator on TCP RX path
-- [ ] Heartbeat PING detection and PONG reply
-- [ ] Frame forwarding TCP → UART (excluding heartbeats)
-- [ ] Frame accumulator on UART RX path
-- [ ] Frame forwarding UART → TCP
-- [ ] UART watchdog (30 s no-data reset)
-- [ ] Hardware watchdog (60 s)
-- [ ] OTA update partition layout
+Key options in `mower_bridge.yaml`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `uart_id` | — | ID of the `uart:` block wired to the mower |
+| `port` | `8080` | TCP port the bridge listens on |
+| `uart.tx_pin` | GPIO17 | UART TX pin |
+| `uart.rx_pin` | GPIO16 | UART RX pin |
+| `uart.baud_rate` | 115200 | Must match mower baud rate |
+| `uart.rx_buffer_size` | 512 | UART RX ring buffer (bytes) |
+
+---
+
+## OTA updates
+
+After the first USB flash, all subsequent firmware updates can be pushed
+wirelessly:
+
+```bash
+esphome run esphome/mower_bridge.yaml
+```
+
+ESPHome will detect that the device is on the network and use OTA automatically.
