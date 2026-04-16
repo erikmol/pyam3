@@ -4,40 +4,9 @@ from typing import Callable
 
 import serial_asyncio
 
-from client import Mower
+from client import Mower, _FrameAccumulator
 
 logger = logging.getLogger(__name__)
-
-# Largest plausible mower frame in bytes.  A corrupted length field could
-# otherwise cause the accumulator to wait indefinitely for data that never
-# arrives.  All known mower frames are well under 100 bytes.
-MAX_FRAME_SIZE = 512
-
-
-# ── UART frame accumulator ────────────────────────────────────────────────────
-
-def _frame_length(buf: bytearray) -> int | None:
-    """
-    Return the expected total byte length of the frame starting at buf[0],
-    or None if there aren't enough bytes in buf to determine it yet.
-
-    Frame layouts:
-      Extended / Linked  STX(1) marker(1) remaining(2-LE) … CRC(1) ETX(1)
-                         total = remaining + 4
-      Simple             STX(1) major(1)  payload_len(1)  … CRC(1) ETX(1)
-                         total = payload_len + 5
-    """
-    if len(buf) < 3:
-        return None
-    marker = buf[1]
-    if marker == 0x81 or marker == 0xFD:
-        if len(buf) < 4:
-            return None
-        remaining = buf[2] | (buf[3] << 8)
-        return remaining + 4
-    else:
-        # Simple protocol — payload length in byte[2]
-        return buf[2] + 5
 
 
 class _UartProtocol(asyncio.Protocol):
@@ -46,8 +15,6 @@ class _UartProtocol(asyncio.Protocol):
 
     UART is a raw byte stream.  This class accumulates bytes until a complete
     STX…ETX frame can be extracted, then forwards it to Mower._dispatch_frame.
-    Frame length is determined from the embedded length field, which is more
-    robust than scanning for ETX (0x03 can appear in payload data).
     """
 
     def __init__(
@@ -58,7 +25,7 @@ class _UartProtocol(asyncio.Protocol):
         self._dispatch_frame = dispatch_frame
         self._on_lost = on_lost
         self._transport: asyncio.Transport | None = None
-        self._buffer: bytearray = bytearray()
+        self._accumulator = _FrameAccumulator(dispatch_frame)
 
     def connection_made(self, transport: asyncio.Transport) -> None:
         self._transport = transport
@@ -66,47 +33,12 @@ class _UartProtocol(asyncio.Protocol):
     def connection_lost(self, exc: Exception | None) -> None:
         if exc:
             logger.error("UART connection lost: %s", exc)
-        self._buffer.clear()
+        self._accumulator.reset()
         self._on_lost(exc)
         self._transport = None
 
     def data_received(self, data: bytes) -> None:
-        self._buffer.extend(data)
-        self._extract_frames()
-
-    def _extract_frames(self) -> None:
-        """Pull all complete frames out of the buffer and dispatch them."""
-        while True:
-            # Find the next STX byte — discard anything before it
-            try:
-                start = self._buffer.index(0x02)
-            except ValueError:
-                self._buffer.clear()
-                return
-            if start > 0:
-                logger.debug("Discarding %d pre-STX bytes", start)
-                del self._buffer[:start]
-
-            # Determine how long this frame should be
-            frame_len = _frame_length(self._buffer)
-            if frame_len is None:
-                return  # need more bytes to read the length field
-
-            if frame_len > MAX_FRAME_SIZE:
-                logger.warning(
-                    "Implausible frame length %d (max %d), discarding STX and resyncing",
-                    frame_len, MAX_FRAME_SIZE,
-                )
-                del self._buffer[0]  # drop the bad STX and rescan
-                continue
-
-            if len(self._buffer) < frame_len:
-                return  # frame is incomplete — wait for more data
-
-            # Extract the complete frame and hand it to the demultiplexer
-            frame = bytearray(self._buffer[:frame_len])
-            del self._buffer[:frame_len]
-            self._dispatch_frame(frame)
+        self._accumulator.feed(data)
 
 
 # ── UART transport ────────────────────────────────────────────────────────────
