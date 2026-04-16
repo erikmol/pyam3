@@ -175,6 +175,8 @@ class Mower(ABC):
             except Exception as exc:
                 logger.warning("Failed to parse linked event: %s — raw: %r", exc, frame)
                 return
+            if event is None:
+                return
             for cb in self._event_callbacks:
                 try:
                     cb(event)

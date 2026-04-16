@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 from protocol.base import create_command
 from protocol.common import crc, MowerNotReadyError, MowerCommandError
+from protocol.linked import LinkedProtocol
 
 # Load the actual protocol from the file
 # with open("protocol.json", "r") as f:
@@ -193,6 +194,62 @@ class TestResponse(unittest.TestCase):
         )
         self.assertEqual(response["data"]["batavoltage"], 19362)
 
+
+class TestLinkedProtocol(unittest.TestCase):
+
+    # Known good frames from linked.py __main__
+    STATE_EVENT    = bytearray.fromhex("02fd10000000000001fe02ea1101000100073b03")
+    ACTIVITY_EVENT = bytearray.fromhex("02fd10000000000001fe02ea1102000100049703")
+
+    def test_parse_known_state_event(self):
+        result = LinkedProtocol().parse_response(self.STATE_EVENT)
+        self.assertEqual(result["name"], "StateEvent")
+        self.assertEqual(result["data"], {"response": 7})
+
+    def test_parse_known_activity_event(self):
+        result = LinkedProtocol().parse_response(self.ACTIVITY_EVENT)
+        self.assertEqual(result["name"], "ActivityEvent")
+        self.assertEqual(result["data"]["response"], 4)
+
+    def test_crc_checked_before_command_lookup(self):
+        # Corrupt a data byte — CRC should catch it before command lookup runs
+        frame = bytearray(self.STATE_EVENT)
+        frame[17] ^= 0xFF   # flip payload byte
+        with self.assertRaises(ValueError) as ctx:
+            LinkedProtocol().parse_response(frame)
+        self.assertIn("CRC", str(ctx.exception))
+
+    def test_unknown_event_returns_none(self):
+        # Build a valid frame with major/minor that don't exist in commands.json
+        frame = bytearray(self.STATE_EVENT)
+        frame[11] = 0x01    # overwrite major lo → unlikely to match any event
+        frame[12] = 0x01
+        frame[-2] = crc(frame[1:-2])
+        result = LinkedProtocol().parse_response(frame)
+        self.assertIsNone(result)
+
+    def test_unsupported_frame_type_returns_none(self):
+        frame = bytearray(self.STATE_EVENT)
+        frame[10] = 0x05    # not 0x02 (event)
+        frame[-2] = crc(frame[1:-2])
+        result = LinkedProtocol().parse_response(frame)
+        self.assertIsNone(result)
+
+    def test_frame_too_short_raises(self):
+        with self.assertRaises(ValueError):
+            LinkedProtocol().parse_response(bytearray([0x02, 0xFD, 0x00, 0x00, 0x03]))
+
+    def test_invalid_length_raises(self):
+        frame = bytearray(self.STATE_EVENT)
+        frame[2] = 0xFF     # corrupt remaining field
+        with self.assertRaises(ValueError):
+            LinkedProtocol().parse_response(frame)
+
+    def test_wrong_marker_raises(self):
+        frame = bytearray(self.STATE_EVENT)
+        frame[1] = 0x81
+        with self.assertRaises(ValueError):
+            LinkedProtocol().parse_response(frame)
 
 
 if __name__ == "__main__":
