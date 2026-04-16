@@ -100,8 +100,11 @@ async def _run_command(
     log_fp,
     cmd_name: str,
     kwargs: dict,
+    cmd_delay: float = 0.0,
 ) -> dict:
     """Send one command, capture frames, write JSONL, return result dict."""
+    if cmd_delay > 0:
+        await asyncio.sleep(cmd_delay)
     mower.pop_frames()          # discard any leftover frames from previous command
     t_start = utcnow()
     result = await mower.send_command(cmd_name, **kwargs)
@@ -122,7 +125,7 @@ async def _run_command(
     return entry
 
 
-async def poll_once(mower: LoggingUartMower, log_fp) -> list[dict]:
+async def poll_once(mower: LoggingUartMower, log_fp, cmd_delay: float = 0.0) -> list[dict]:
     """Run one complete poll cycle; flush unsolicited frames first."""
     results: list[dict] = []
 
@@ -137,7 +140,7 @@ async def poll_once(mower: LoggingUartMower, log_fp) -> list[dict]:
 
     # Static read-only commands
     for cmd_name, kwargs in STATIC_COMMANDS:
-        entry = await _run_command(mower, log_fp, cmd_name, kwargs)
+        entry = await _run_command(mower, log_fp, cmd_name, kwargs, cmd_delay)
         results.append(entry)
 
     # Dynamic: fetch individual messages
@@ -146,7 +149,7 @@ async def poll_once(mower: LoggingUartMower, log_fp) -> list[dict]:
     )
     if n_messages:
         for msg_id in range(min(int(n_messages), MAX_MESSAGES)):
-            entry = await _run_command(mower, log_fp, "GetMessage", {"messageId": msg_id})
+            entry = await _run_command(mower, log_fp, "GetMessage", {"messageId": msg_id}, cmd_delay)
             results.append(entry)
 
     # Dynamic: fetch individual tasks
@@ -155,7 +158,7 @@ async def poll_once(mower: LoggingUartMower, log_fp) -> list[dict]:
     )
     if n_tasks:
         for task_id in range(min(int(n_tasks), MAX_TASKS)):
-            entry = await _run_command(mower, log_fp, "GetTask", {"taskId": task_id})
+            entry = await _run_command(mower, log_fp, "GetTask", {"taskId": task_id}, cmd_delay)
             results.append(entry)
 
     return results
@@ -201,6 +204,10 @@ async def main() -> None:
         "--interval", type=float, default=0,
         help="Repeat every N seconds; 0 = one-shot (default: 0)",
     )
+    parser.add_argument(
+        "--cmd-delay", type=float, default=0.25,
+        help="Delay in seconds between commands (default: 0.25)",
+    )
     args = parser.parse_args()
 
     log_dir = Path(args.log_dir)
@@ -240,7 +247,7 @@ async def main() -> None:
         try:
             while True:
                 cycle += 1
-                results = await poll_once(mower, log_fp)
+                results = await poll_once(mower, log_fp, args.cmd_delay)
                 print_table(results, cycle)
                 if args.interval <= 0:
                     break
