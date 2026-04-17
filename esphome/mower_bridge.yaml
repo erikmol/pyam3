@@ -38,7 +38,8 @@ mdns:
 
 # ESPHome native API (optional — for the ESPHome dashboard/Home Assistant).
 api:
-  password: !secret api_password
+  encryption:
+    key: !secret api_key
 
 # Over-the-air updates — flash new firmware without USB after first flash.
 ota:
