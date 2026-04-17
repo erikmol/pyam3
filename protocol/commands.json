@@ -129,7 +129,12 @@
     "StartTrigger": {
         "major": 4586,
         "minor": 4,
-        "description": "Unknown what this is. Resume?"
+        "description": "Trigger execution of a previously configured schedule. See also AbortStartTrigger."
+    },
+    "AbortStartTrigger": {
+        "major": 4586,
+        "minor": 15,
+        "description": "Abort a start trigger initiated by StartTrigger."
     },
     "Pause": {
         "major": 4586,
@@ -288,5 +293,12 @@
         "minor": 2,
         "responseType": "uint8",
         "description": "Mower activity."
+    },
+    "PowerEvent": {
+        "event": 1,
+        "major": 4674,
+        "minor": 0,
+        "responseType": "uint8",
+        "description": "Power POWER_UP_AND_INIT(0), ACTIVE(1), STANDBY(2), SHUTDOWN(3), SWITCH_TO_STANDBY(4), SWITCH_TO_SHUTDOWN(5), COUNT(6)."
     }
 }
