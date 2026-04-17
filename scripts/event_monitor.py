@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 event_monitor.py — Passive event listener for Husqvarna Automower over UART.
 
@@ -41,6 +41,22 @@ def write_jsonl(fp, obj: dict) -> None:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
+async def _drain_unsolicited(mower, log_fp_ref: list, interval: float = 0.5) -> None:
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            if log_fp_ref:
+                for u in mower.pop_unsolicited():
+                    write_jsonl(log_fp_ref[0], {
+                        "type": "unsolicited",
+                        "timestamp": u["t"],
+                        "marker": u.get("marker"),
+                        "hex": u["hex"],
+                    })
+    except asyncio.CancelledError:
+        pass
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser(
@@ -110,6 +126,7 @@ async def main() -> None:
 
     with open(log_path, "a", encoding="utf-8") as log_fp:
         _log_fp_ref.append(log_fp)
+        drain_task = asyncio.create_task(_drain_unsolicited(mower, _log_fp_ref))
         try:
             if args.duration > 0:
                 await asyncio.sleep(args.duration)
@@ -119,9 +136,10 @@ async def main() -> None:
         except KeyboardInterrupt:
             print("\nInterrupted.")
         finally:
-            # Log any remaining unsolicited frames not yet tied to an event
-            leftovers = mower.pop_unsolicited()
-            for u in leftovers:
+            drain_task.cancel()
+            await asyncio.gather(drain_task, return_exceptions=True)
+            # Flush any frames that arrived after the last drain tick
+            for u in mower.pop_unsolicited():
                 write_jsonl(log_fp, {
                     "type": "unsolicited",
                     "timestamp": u["t"],

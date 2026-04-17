@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 bench_test.py — Workbench function-test script for Husqvarna Automower over UART.
 
@@ -122,6 +122,15 @@ async def _run_command(
         entry["params"] = kwargs
 
     write_jsonl(log_fp, entry)
+
+    for u in mower.pop_unsolicited():
+        write_jsonl(log_fp, {
+            "type": "unsolicited",
+            "timestamp": u["t"],
+            "marker": u.get("marker"),
+            "hex": u["hex"],
+        })
+
     return entry
 
 
@@ -222,11 +231,13 @@ async def main() -> None:
 
     def on_event(event: dict) -> None:
         if _log_fp_ref:
+            frames = mower.pop_unsolicited()
             write_jsonl(_log_fp_ref[0], {
                 "type": "event",
                 "timestamp": utcnow(),
                 "name": event.get("name"),
                 "data": event.get("data"),
+                "frames": frames,
             })
             print(f"  [EVENT] {event.get('name')}: {event.get('data')}")
 

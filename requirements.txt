@@ -1,2 +1,3 @@
 crcmod
 pyserial-asyncio
+prompt_toolkit
