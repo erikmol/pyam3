@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Automower WiFi bridge",
+        "data": {
+          "host": "Bridge hostname or IP address",
+          "port": "TCP port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the bridge. Check the host and port."
+    },
+    "abort": {
+      "already_configured": "This bridge is already configured."
+    }
+  }
+}
