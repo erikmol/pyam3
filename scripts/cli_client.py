@@ -150,6 +150,9 @@ async def run_interactive(args) -> None:
                 cmd_name = tokens[0]
 
                 if cmd_name.lower() == "break":
+                    if args.host:
+                        print("  'break' is only supported on UART (--port), not WiFi.")
+                        continue
                     duration = float(tokens[1]) if len(tokens) > 1 else 0.25
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, mower._transport.serial.send_break, duration)

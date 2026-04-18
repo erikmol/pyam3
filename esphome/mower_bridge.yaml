@@ -32,10 +32,6 @@ wifi:
 captive_portal:
 
 # ── Connectivity ──────────────────────────────────────────────────────────────
-# mDNS is enabled by default; the bridge is accessible as mower-bridge.local
-mdns:
-  disabled: false
-
 # ESPHome native API (optional — for the ESPHome dashboard/Home Assistant).
 api:
   encryption:
@@ -46,13 +42,10 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
-# Minimal web UI for status and logs.
-web_server:
-  port: 80
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logger:
-  level: INFO
+  level: DEBUG
 
 # ── UART to mower ─────────────────────────────────────────────────────────────
 # Adjust tx_pin / rx_pin to match your wiring.
@@ -75,9 +68,3 @@ mower_bridge:
   uart_id: uart_mower
   port: 8080               # must match WifiSerialMower(host, port=8080)
 
-# ── secrets.yaml (create alongside this file, never commit) ──────────────────
-# wifi_ssid: "YourNetwork"
-# wifi_password: "YourPassword"
-# ap_password: "SetupPassword"
-# api_password: "SomePassword"
-# ota_password: "SomePassword"

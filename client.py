@@ -81,6 +81,15 @@ class _FrameAccumulator:
                 logger.debug("Discarding %d pre-STX bytes", start)
                 del self._buf[:start]
 
+            # Check for heartbeat PONG before _frame_length() — the PONG bytes
+            # would be misparsed as a Simple protocol frame (marker=0x50, length=84).
+            if len(self._buf) >= len(_HEARTBEAT_RESPONSE) and \
+                    self._buf[:len(_HEARTBEAT_RESPONSE)] == bytearray(_HEARTBEAT_RESPONSE):
+                if self._pong_cb:
+                    self._pong_cb()
+                del self._buf[:len(_HEARTBEAT_RESPONSE)]
+                continue
+
             frame_len = _frame_length(self._buf)
             if frame_len is None:
                 return
@@ -465,11 +474,12 @@ class WifiSerialMower(Mower):
                 data = await self._reader.read(4096)
                 if not data:
                     logger.warning("ESP32 closed TCP connection")
-                    break
+                    await self._on_connection_lost()
+                    return
                 self._accumulator.feed(data)
-        except (asyncio.CancelledError, OSError):
-            pass
-        finally:
+        except asyncio.CancelledError:
+            raise  # intentional shutdown — caller handles reconnect
+        except OSError:
             await self._on_connection_lost()
 
     async def _on_connection_lost(self) -> None:

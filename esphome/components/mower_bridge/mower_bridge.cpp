@@ -151,6 +151,17 @@ void MowerBridgeComponent::handle_tcp_to_uart_() {
       if (tcp_buf_len_ == 0) break;
     }
 
+    // Intercept bridge heartbeat before frame_length_() — the heartbeat bytes
+    // would be misparsed as a Simple protocol frame (marker=0x50, length=73).
+    if (tcp_buf_len_ >= HEARTBEAT_LEN &&
+        memcmp(tcp_buf_, HEARTBEAT_PING, HEARTBEAT_LEN) == 0) {
+      ESP_LOGD(TAG, "Heartbeat PING → PONG");
+      send(client_fd_, HEARTBEAT_PONG, HEARTBEAT_LEN, MSG_DONTWAIT);
+      memmove(tcp_buf_, tcp_buf_ + HEARTBEAT_LEN, tcp_buf_len_ - HEARTBEAT_LEN);
+      tcp_buf_len_ -= HEARTBEAT_LEN;
+      continue;
+    }
+
     int flen = frame_length_(tcp_buf_, tcp_buf_len_);
     if (flen < 0) break;  // incomplete header — wait for more bytes
 
@@ -164,13 +175,8 @@ void MowerBridgeComponent::handle_tcp_to_uart_() {
 
     if (static_cast<size_t>(flen) > tcp_buf_len_) break;  // frame incomplete
 
-    // Intercept bridge heartbeat — respond with PONG, don't touch UART.
-    if (flen == static_cast<int>(HEARTBEAT_LEN) &&
-        memcmp(tcp_buf_, HEARTBEAT_PING, HEARTBEAT_LEN) == 0) {
-      send(client_fd_, HEARTBEAT_PONG, HEARTBEAT_LEN, MSG_DONTWAIT);
-    } else {
-      write_array(tcp_buf_, flen);
-    }
+    ESP_LOGD(TAG, "TCP→UART frame: %d bytes (marker=0x%02X)", flen, tcp_buf_[1]);
+    write_array(tcp_buf_, flen);
 
     memmove(tcp_buf_, tcp_buf_ + flen, tcp_buf_len_ - flen);
     tcp_buf_len_ -= flen;
@@ -187,6 +193,7 @@ void MowerBridgeComponent::handle_uart_to_tcp_() {
     size_t to_read = std::min(static_cast<size_t>(available()), sizeof(buf));
     read_array(buf, to_read);
 
+    ESP_LOGD(TAG, "UART→TCP: %d bytes", (int)to_read);
     ssize_t sent = send(client_fd_, buf, to_read, MSG_DONTWAIT);
     if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
       ESP_LOGW(TAG, "TCP send error (errno %d), closing client", errno);
