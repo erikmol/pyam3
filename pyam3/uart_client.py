@@ -4,7 +4,7 @@ from typing import Callable
 
 import serial_asyncio
 
-from client import Mower, _FrameAccumulator
+from pyam3.client import Mower, _FrameAccumulator
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +86,3 @@ class UartMower(Mower):
     def _on_transport_lost(self, exc: Exception | None) -> None:
         self._connected = False
         self._cancel_pending()
-
-
-if __name__ == "__main__":
-    import sys
-
-    port = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyUSB0"
-    baudrate = int(sys.argv[2]) if len(sys.argv) > 2 else 115200
-
-    async def main():
-        from client import main as run
-        mower = UartMower(port, baudrate)
-        await run(mower)
-
-    asyncio.run(main())

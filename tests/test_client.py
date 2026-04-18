@@ -15,9 +15,9 @@ from unittest.mock import MagicMock, patch
 # in environments where pyserial-asyncio is not installed.
 sys.modules.setdefault("serial_asyncio", MagicMock())
 
-from client import Mower, _frame_length, MAX_FRAME_SIZE     # noqa: E402
-from uart_client import _UartProtocol                       # noqa: E402
-from protocol.common import crc                             # noqa: E402
+from pyam3.client import Mower, _frame_length, MAX_FRAME_SIZE     # noqa: E402
+from pyam3.uart_client import _UartProtocol                       # noqa: E402
+from pyam3.protocol.common import crc                             # noqa: E402
 
 
 # ── Test helpers ──────────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ class TestDispatchFrame(unittest.IsolatedAsyncioTestCase):
 
     async def test_psk_frame_logs_warning_and_does_not_raise(self):
         mower = _MockMower()
-        with self.assertLogs("client", level="WARNING") as log:
+        with self.assertLogs("pyam3.client", level="WARNING") as log:
             mower._dispatch_frame(bytearray([0x02, 0xFE, 0x00, 0x03]))
         self.assertTrue(any("0xFE" in msg or "PSK" in msg for msg in log.output))
 

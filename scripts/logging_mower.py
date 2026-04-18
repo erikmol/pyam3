@@ -6,15 +6,10 @@ all traffic — including unsolicited heartbeats and events that the base
 class would silently drop — is recorded for debugging or emulation.
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from datetime import datetime, timezone
 
-from client import WifiSerialMower
-from uart_client import UartMower
+from pyam3.client import WifiSerialMower
+from pyam3.uart_client import UartMower
 
 
 def _utcnow() -> str:

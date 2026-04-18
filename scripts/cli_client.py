@@ -26,10 +26,9 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from logging_mower import LoggingUartMower, LoggingWifiMower
 
-COMMANDS_PATH = Path(__file__).resolve().parent.parent / "protocol" / "commands.json"
+COMMANDS_PATH = Path(__file__).resolve().parent.parent / "pyam3" / "protocol" / "commands.json"
 
 # ---------------------------------------------------------------------------
 # Shared helpers

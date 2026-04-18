@@ -1,5 +1,4 @@
-from protocol.common import Protocol, crc
-# This is the simple protocol implementation
+from pyam3.protocol.common import Protocol, crc
 
 
 class SimpleProtocol(Protocol):
@@ -11,15 +10,9 @@ class SimpleProtocol(Protocol):
         super().__init__(command)
 
     def generate_request(self, **kwargs):
-        """
-        Generate a request for the command.
-        """
-        # Implement the logic to generate a request based on the command and kwargs
-
         payload_length = self.request_length
         payload_data = self.prepare_payload_data(**kwargs)
 
-        # Simple protocol request
         self.request_data = bytearray(6 + payload_length)
         self.request_data[0] = 0x02
         self.request_data[1] = self.major
@@ -29,30 +22,23 @@ class SimpleProtocol(Protocol):
             self.request_data[4 : 4 + payload_length] = payload_data
 
         self.request_data[-2] = crc(self.request_data[1:-2])
-        self.request_data[-1] = 0x03  # STX
+        self.request_data[-1] = 0x03  # ETX
 
         return self.request_data
 
     def parse_response(self, response: bytearray) -> dict:
-        """
-        Parse the response from the Automower.
-        """
-
         if response[0] != 0x02 or response[-1] != 0x03:
             raise ValueError("Invalid response format")
 
-        # Check CRC
         if crc(response[1:-2]) != response[-2]:
             raise ValueError("CRC mismatch in response")
 
-        # Extract data
         data_length = response[2] - 1
         if data_length != len(response) - 6:
             raise ValueError("Invalid response length")
 
         if self.major != response[1]-1:
             raise ValueError(f"Major command mismatch: expected {self.major}, got {response[1]-1}")
-
 
         return {
             "status": response[3],

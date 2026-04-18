@@ -74,14 +74,14 @@ class Protocol:
                     payload_data += kwargs[request_name].to_bytes(1, byteorder="little")
                 else:
                     raise ValueError("Unknown request type: " + self.request_data_type)
-                
+
         if not len(payload_data) == self.request_length:
             raise ValueError(
                 f"Payload length mismatch for command {self.name} ({self.major}, {self.minor}): "
                 f"Expected {self.request_length}, got {len(payload_data)}"
             )
         return payload_data
-    
+
     def parse_data(self, data:bytearray)-> dict | None:
         if self.response_length == 0:
             return None

@@ -3,9 +3,9 @@ thus there is no better "source code" than the tests themselves :)"""
 
 import unittest
 from unittest.mock import patch
-from protocol.base import create_command
-from protocol.common import crc, MowerNotReadyError, MowerCommandError
-from protocol.linked import LinkedProtocol
+from pyam3.protocol.base import create_command
+from pyam3.protocol.common import crc, MowerNotReadyError, MowerCommandError
+from pyam3.protocol.linked import LinkedProtocol
 
 # Load the actual protocol from the file
 # with open("protocol.json", "r") as f:

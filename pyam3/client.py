@@ -4,9 +4,9 @@ import socket
 import logging
 from typing import Callable
 
-from protocol.base import create_command
-from protocol.extended import ExtendedProtocol
-from protocol.linked import LinkedProtocol
+from pyam3.protocol.base import create_command
+from pyam3.protocol.extended import ExtendedProtocol
+from pyam3.protocol.linked import LinkedProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,6 @@ class _FrameAccumulator:
             frame = bytearray(self._buf[:frame_len])
             del self._buf[:frame_len]
 
-            # Bridge heartbeat — pong from ESP32, not a mower frame
             if frame == bytearray(_HEARTBEAT_RESPONSE):
                 if self._pong_cb:
                     self._pong_cb()
@@ -201,11 +200,10 @@ class Mower(ABC):
             if not sf.done():
                 sf.set_result(frame)
 
-        # ── AMG3_PROTOCOL_EXTENDEDPSK (0xFE marker) — not yet supported ─────────
+        # ── AMG3_PROTOCOL_EXTENDEDPSK (0xFE marker) — not yet supported ──────
         elif marker == 0xFE:
             logger.warning("Received AMG3_PROTOCOL_EXTENDEDPSK frame (0xFE) — not supported, dropping")
 
-        # ── Anything else ─────────────────────────────────────────────────────
         else:
             logger.debug("Unknown frame marker=0x%02x, dropping", marker)
 
@@ -266,8 +264,8 @@ class Mower(ABC):
 
         try:
             response_dict = command.parse_response(raw)
-        except ValueError as exc:
-            logger.error("Failed to parse response for '%s': %s", command_name, exc)
+        except Exception as exc:
+            logger.warning("Failed to parse response for '%s': %s", command_name, exc)
             return None
 
         response_data = response_dict.get("data")
@@ -478,7 +476,7 @@ class WifiSerialMower(Mower):
                     return
                 self._accumulator.feed(data)
         except asyncio.CancelledError:
-            raise  # intentional shutdown — caller handles reconnect
+            raise
         except OSError:
             await self._on_connection_lost()
 
@@ -532,8 +530,8 @@ async def main(mower: Mower):
     await mower.disconnect()
 
 if __name__ == "__main__":
+    import asyncio
     host = "192.168.1.100"   # ESP32 bridge IP or hostname
     port = 8080
     mower = WifiSerialMower(host, port)
-
     asyncio.run(main(mower))

@@ -1,6 +1,6 @@
 import logging
-from protocol.common import Protocol, crc
-from protocol.base import commands_class
+from pyam3.protocol.common import Protocol, crc
+from pyam3.protocol.base import commands_class
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 #   <minor_lo> <minor_hi> <len_lo> <len_hi> [payload] <crc> 03
 _OFF_STX      = 0
 _OFF_MARKER   = 1
-_OFF_REM_LO   = 2   # remaining byte count, little-endian 16-bit
+_OFF_REM_LO   = 2
 _OFF_REM_HI   = 3
 _OFF_ROUTING  = 4   # 6-byte routing/sequence header (purpose unknown)
 _OFF_TYPE     = 10  # frame type: 0x02 = event
@@ -88,10 +88,3 @@ class LinkedProtocol(Protocol):
             "name": self.name,
             "data": self.parse_data(data),
         }
-
-
-if __name__ == "__main__":
-    lp = LinkedProtocol()
-    print(lp.parse_response(bytearray.fromhex("02fd10000000000001fe02ea1101000100073b03")))
-    print(lp.parse_response(bytearray.fromhex("02fd10000000000001fe02ea1102000100049703")))
-    print(lp.parse_response(bytearray.fromhex("02fd10000000000001fe02ea110200010005c903")))

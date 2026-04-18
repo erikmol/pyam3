@@ -6,3 +6,4 @@ __pycache__/
 logs/
 esphome/.esphome/
 esphome/secrets.yaml
+*egg-info/
