@@ -38,6 +38,14 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
+def _resolve_log_path(log_dir: Path, prefix: str, append: bool) -> Path:
+    if append:
+        existing = sorted(log_dir.glob(f"{prefix}_????????*.jsonl"))
+        if existing:
+            return existing[-1]
+    return log_dir / f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+
+
 def _write_jsonl(fp, obj: dict) -> None:
     fp.write(json.dumps(obj, default=str) + "\n")
     fp.flush()
@@ -103,8 +111,8 @@ async def run_interactive(args) -> None:
 
     log_dir = Path(args.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"cli_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
-    print(f"Log: {log_path}")
+    log_path = _resolve_log_path(log_dir, "cli", args.append)
+    print(f"Log: {log_path} ({'appending' if args.append and log_path.exists() else 'new'})")
 
     mower = _make_mower(args)
 
@@ -254,8 +262,8 @@ async def run_interactive(args) -> None:
 async def run_monitor(args) -> None:
     log_dir = Path(args.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
-    print(f"Log: {log_path}")
+    log_path = _resolve_log_path(log_dir, "events", args.append)
+    print(f"Log: {log_path} ({'appending' if args.append and log_path.exists() else 'new'})")
 
     mower = _make_mower(args)
 
@@ -451,8 +459,8 @@ def _bench_print_table(results: list[dict], cycle: int) -> None:
 async def run_bench(args) -> None:
     log_dir = Path(args.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"bench_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
-    print(f"Log: {log_path}")
+    log_path = _resolve_log_path(log_dir, "bench", args.append)
+    print(f"Log: {log_path} ({'appending' if args.append and log_path.exists() else 'new'})")
 
     mower = _make_mower(args)
 
@@ -522,6 +530,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--baud", type=int, default=115200, help="UART baud rate (default: 115200)")
     parser.add_argument("--tcp-port", type=int, default=8080, help="WiFi bridge TCP port (default: 8080)")
     parser.add_argument("--log-dir", default="logs", help="Log directory (default: logs/)")
+    parser.add_argument(
+        "--append", action="store_true",
+        help="Append to the latest existing log file instead of creating a new one",
+    )
 
     sub = parser.add_subparsers(dest="mode")
     sub.add_parser("interactive", help="Interactive prompt (default)")
