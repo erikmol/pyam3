@@ -27,7 +27,7 @@ The bridge is reachable at **`mower-bridge.local:8080`** once connected to WiFi.
 To connect the Python client:
 
 ```python
-from client import WifiSerialMower
+from pyam3.client import WifiSerialMower
 mower = WifiSerialMower("mower-bridge.local", port=8080)
 ```
 

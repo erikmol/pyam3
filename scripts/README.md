@@ -46,7 +46,7 @@ python scripts/cli_client.py --port COM3          # interactive is the default
 python scripts/cli_client.py --host mower.local
 ```
 
-- Tab-complete any command name from `protocol/commands.json`.
+- Tab-complete any command name from `pyam3/protocol/commands.json`.
 - If a command takes parameters and you omit them, the prompt asks for each one.
 - `break [duration_s]` — sends a UART break signal (UART transport only, default 0.25 s).
 - Log file: `logs/cli_YYYYMMDD_HHMMSS.jsonl`
