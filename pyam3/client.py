@@ -300,6 +300,10 @@ class Mower(ABC):
             try:
                 self._send_bytes(request)
                 return await asyncio.wait_for(fut, timeout=timeout)
+            except asyncio.CancelledError:
+                if asyncio.current_task().cancelling():
+                    raise
+                return None  # future cancelled by _cancel_pending() on connection loss
             except asyncio.TimeoutError:
                 if attempt < retries - 1:
                     logger.warning(
@@ -332,6 +336,10 @@ class Mower(ABC):
                 try:
                     self._send_bytes(request)
                     return await asyncio.wait_for(fut, timeout=timeout)
+                except asyncio.CancelledError:
+                    if asyncio.current_task().cancelling():
+                        raise
+                    return None  # future cancelled by _cancel_pending() on connection loss
                 except asyncio.TimeoutError:
                     if attempt < retries - 1:
                         logger.warning(
