@@ -82,7 +82,6 @@ async def run_monitor(args) -> None:
 
     mower = _make_mower(args)
 
-    # Track ping/pong health
     last_pong_time: list[float] = [asyncio.get_event_loop().time()]
 
     def on_event(event: dict) -> None:
@@ -102,6 +101,10 @@ async def run_monitor(args) -> None:
     with open(log_path, log_mode, encoding="utf-8") as log_fp:
         try:
             while True:
+                if not mower.is_connected:
+                    await asyncio.sleep(1.0)
+                    continue
+
                 cycle += 1
                 new_state: dict = {}
                 poll_ok = True
@@ -119,6 +122,11 @@ async def run_monitor(args) -> None:
                     except Exception as e:
                         new_state[cmd] = None
                         poll_ok = False
+
+                # Send KeepAlive each cycle when requested
+                if args.keep_alive and poll_ok:
+                    await mower.send_command("KeepAlive")
+                    mower.pop_frames()
 
                 # Connection health: check last pong freshness
                 age = asyncio.get_event_loop().time() - last_pong_time[0]
@@ -150,11 +158,17 @@ async def run_monitor(args) -> None:
 
                 last_state = new_state
 
-                # Drain unsolicited frames; update pong timestamp if seen
+                # Drain unsolicited frames; log them and update pong timestamp if seen
                 for u in mower.pop_unsolicited():
                     marker = u.get("marker", "")
                     if marker in ("0xfd",):
                         last_pong_time[0] = asyncio.get_event_loop().time()
+                    _write_jsonl(log_fp, {
+                        "type": "unsolicited",
+                        "timestamp": u["t"],
+                        "marker": marker,
+                        "hex": u["hex"],
+                    })
 
                 await asyncio.sleep(args.interval)
 
@@ -197,6 +211,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--append", action="store_true",
         help="Append to the latest existing log file instead of creating a new one",
+    )
+    parser.add_argument(
+        "--keep-alive", action="store_true",
+        help="Send KeepAlive to the mower each poll cycle.",
     )
     return parser
 

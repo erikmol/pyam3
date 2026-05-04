@@ -139,6 +139,10 @@ class Mower(ABC):
 
     # ── Transport interface ───────────────────────────────────────────────────
 
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
     @abstractmethod
     async def connect(self) -> None:
         """Open the transport and start receiving."""
@@ -248,7 +252,7 @@ class Mower(ABC):
         (e.g. GetBatteryLevel returns 85 rather than {"response": 85}).
         """
         if not self._connected:
-            logger.error("send_command called before connect()")
+            logger.debug("send_command called while not connected")
             return None
 
         command = create_command(command_name)
