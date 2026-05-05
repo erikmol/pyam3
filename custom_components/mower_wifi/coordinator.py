@@ -16,7 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 class MowerData:
     battery_level: int | None = None
     is_charging: bool | None = None
-    remaining_charge_time: int | None = None  # raw value from mower
+    remaining_charge_time: int | None = None  # minutes (raw wire value is seconds)
     state: int | None = None     # raw uint8 from GetState
     activity: int | None = None  # raw uint8 from GetActivity
     mode: int | None = None      # raw uint8 from GetMode
@@ -81,7 +81,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
         self._data = MowerData(
             battery_level=_val(battery_level, int),
             is_charging=_val(is_charging, bool),
-            remaining_charge_time=_val(remaining_charge_time, int),
+            remaining_charge_time=_val(remaining_charge_time, lambda v: int(v) // 60),
             state=_val(state, int),
             activity=_val(activity, int),
             mode=_val(mode, int),
