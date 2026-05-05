@@ -2,9 +2,10 @@
   "domain": "mower_wifi",
   "name": "Automower WiFi",
   "version": "0.1.0",
-  "requirements": ["pyam3==0.1.0"],
+  "requirements": [],
   "dependencies": [],
   "codeowners": [],
+  "config_flow": true,
   "iot_class": "local_polling",
   "documentation": ""
 }
