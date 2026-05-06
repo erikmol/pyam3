@@ -59,6 +59,10 @@ class MowerBinarySensor(CoordinatorEntity[MowerCoordinator], BinarySensorEntity)
         }
 
     @property
+    def available(self) -> bool:
+        return self.coordinator.connection_available
+
+    @property
     def is_on(self) -> bool | None:
         data: MowerData | None = self.coordinator.data
         if data is None:

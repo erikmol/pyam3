@@ -1,13 +1,15 @@
 import asyncio
 import logging
 from dataclasses import dataclass, replace
+from datetime import datetime
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from pyam3.client import WifiSerialMower
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import CONNECTION_STALE_TIMEOUT, DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +37,15 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
         )
         self.mower = mower
         self._data = MowerData()
+        self._last_contact: datetime | None = None
         mower.on_event(self._handle_event)
+
+    @property
+    def connection_available(self) -> bool:
+        """True if the mower was reachable within the stale timeout window."""
+        if self._last_contact is None:
+            return False
+        return (dt_util.utcnow() - self._last_contact) < CONNECTION_STALE_TIMEOUT
 
     @callback
     def _handle_event(self, event: dict) -> None:
@@ -54,6 +64,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             updated = True
 
         if updated:
+            self._last_contact = dt_util.utcnow()
             self.async_set_updated_data(self._data)
 
     async def _async_update_data(self) -> MowerData:
@@ -69,15 +80,22 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 return_exceptions=True,
             )
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with mower: {err}") from err
+            _LOGGER.debug("Error communicating with mower: %s", err)
+            return self._data
 
-        battery_level, is_charging, remaining_charge_time, state, activity, mode, error_code = results
+        # If every command failed, the mower is unreachable — keep cached data.
+        if all(isinstance(r, Exception) for r in results):
+            _LOGGER.debug("All mower commands failed, keeping last known data")
+            return self._data
 
         def _val(v, cast=None):
             if isinstance(v, Exception) or v is None:
                 return None
             return cast(v) if cast else v
 
+        battery_level, is_charging, remaining_charge_time, state, activity, mode, error_code = results
+
+        self._last_contact = dt_util.utcnow()
         self._data = MowerData(
             battery_level=_val(battery_level, int),
             is_charging=_val(is_charging, bool),

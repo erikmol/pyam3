@@ -73,10 +73,7 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
 
     @property
     def available(self) -> bool:
-        if not super().available:
-            return False
-        data = self.coordinator.data
-        return data is not None and data.state is not None
+        return self.coordinator.connection_available
 
     @property
     def activity(self) -> LawnMowerActivity | None:

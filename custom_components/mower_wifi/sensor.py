@@ -100,7 +100,7 @@ class MowerSensor(CoordinatorEntity[MowerCoordinator], SensorEntity):
 
     @property
     def available(self) -> bool:
-        if not super().available:
+        if not self.coordinator.connection_available:
             return False
         if self.entity_description.key == "remaining_charge_time":
             data = self.coordinator.data
