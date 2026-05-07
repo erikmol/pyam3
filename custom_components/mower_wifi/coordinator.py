@@ -86,7 +86,8 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             return self._data
 
         # If every command failed, the mower is unreachable — keep cached data.
-        if all(isinstance(r, Exception) for r in results):
+        # None is returned by send_command when not connected (instant, no exception).
+        if all(isinstance(r, Exception) or r is None for r in results):
             _LOGGER.debug("All mower commands failed, keeping last known data")
             return self._data
 
