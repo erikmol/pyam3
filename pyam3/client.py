@@ -269,7 +269,7 @@ class Mower(ABC):
         try:
             response_dict = command.parse_response(raw)
         except Exception as exc:
-            logger.warning("Failed to parse response for '%s': %s", command_name, exc)
+            logger.debug("Failed to parse response for '%s': %s", command_name, exc)
             return None
 
         response_data = response_dict.get("data")
@@ -310,12 +310,12 @@ class Mower(ABC):
                 return None  # future cancelled by _cancel_pending() on connection loss
             except asyncio.TimeoutError:
                 if attempt < retries - 1:
-                    logger.warning(
+                    logger.debug(
                         "Extended tid=%d timeout, retrying (%d/%d)…",
                         tid, attempt + 1, retries - 1,
                     )
                 else:
-                    logger.warning(
+                    logger.debug(
                         "Extended tid=%d no response after %d retries", tid, retries
                     )
             finally:
@@ -346,12 +346,12 @@ class Mower(ABC):
                     return None  # future cancelled by _cancel_pending() on connection loss
                 except asyncio.TimeoutError:
                     if attempt < retries - 1:
-                        logger.warning(
+                        logger.debug(
                             "Simple command timeout, retrying (%d/%d)…",
                             attempt + 1, retries - 1,
                         )
                     else:
-                        logger.warning(
+                        logger.debug(
                             "Simple command no response after %d retries", retries
                         )
                 finally:
@@ -521,7 +521,7 @@ class WifiSerialMower(Mower):
                         self._pong_event.wait(), timeout=_HEARTBEAT_TIMEOUT
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("Heartbeat timeout — triggering reconnect")
+                    logger.debug("Heartbeat timeout — triggering reconnect")
                     await self._on_connection_lost()
         except asyncio.CancelledError:
             pass
