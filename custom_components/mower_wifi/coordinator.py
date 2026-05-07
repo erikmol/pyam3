@@ -107,7 +107,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             state=_val(state, int, old.state),
             activity=_val(activity, int, old.activity),
             mode=_val(mode, int, old.mode),
-            override=_val(override, int, old.override),
+            override=_val(override.get("action") if isinstance(override, dict) else override, int, old.override),
             error_code=_val(error_code, int, old.error_code),
         )
         return self._data
