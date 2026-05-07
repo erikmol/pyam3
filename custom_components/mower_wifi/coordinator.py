@@ -88,21 +88,23 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             _LOGGER.debug("All mower commands failed, keeping last known data")
             return self._data
 
-        def _val(v, cast=None):
+        old = self._data
+
+        def _val(v, cast, old_val):
             if isinstance(v, Exception) or v is None:
-                return None
+                return old_val
             return cast(v) if cast else v
 
         battery_level, is_charging, remaining_charge_time, state, activity, mode, error_code = results
 
         self._last_contact = dt_util.utcnow()
         self._data = MowerData(
-            battery_level=_val(battery_level, int),
-            is_charging=_val(is_charging, bool),
-            remaining_charge_time=_val(remaining_charge_time, lambda v: int(v) // 60),
-            state=_val(state, int),
-            activity=_val(activity, int),
-            mode=_val(mode, int),
-            error_code=_val(error_code, int),
+            battery_level=_val(battery_level, int, old.battery_level),
+            is_charging=_val(is_charging, bool, old.is_charging),
+            remaining_charge_time=_val(remaining_charge_time, lambda v: int(v) // 60, old.remaining_charge_time),
+            state=_val(state, int, old.state),
+            activity=_val(activity, int, old.activity),
+            mode=_val(mode, int, old.mode),
+            error_code=_val(error_code, int, old.error_code),
         )
         return self._data
