@@ -22,6 +22,7 @@ class MowerData:
     state: int | None = None     # raw uint8 from GetState
     activity: int | None = None  # raw uint8 from GetActivity
     mode: int | None = None      # raw uint8 from GetMode
+    override: int | None = None  # raw uint8 from GetOverride (OverrideAction)
     error_code: int | None = None
 
 
@@ -76,6 +77,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 self.mower.send_command("GetState"),
                 self.mower.send_command("GetActivity"),
                 self.mower.send_command("GetMode"),
+                self.mower.send_command("GetOverride"),
                 self.mower.send_command("GetError"),
                 return_exceptions=True,
             )
@@ -95,7 +97,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 return old_val
             return cast(v) if cast else v
 
-        battery_level, is_charging, remaining_charge_time, state, activity, mode, error_code = results
+        battery_level, is_charging, remaining_charge_time, state, activity, mode, override, error_code = results
 
         self._last_contact = dt_util.utcnow()
         self._data = MowerData(
@@ -105,6 +107,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             state=_val(state, int, old.state),
             activity=_val(activity, int, old.activity),
             mode=_val(mode, int, old.mode),
+            override=_val(override, int, old.override),
             error_code=_val(error_code, int, old.error_code),
         )
         return self._data

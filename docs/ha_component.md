@@ -52,41 +52,100 @@ The bridge must be set up first — see [esp32_bridge.md](esp32_bridge.md).
 
 ## State mapping
 
-The `lawn_mower` entity maps raw mower codes to `LawnMowerActivity`:
+The `lawn_mower` entity maps the combination of `state`, `activity`, `mode`, `override`, and `error_code` to `LawnMowerActivity`. Priority is top-down — first match wins.
 
-| Condition | HA state |
-|-----------|----------|
-| `error_code != 0` or state is FATAL_ERROR / ERROR | `error` |
-| activity is GOING_OUT or MOWING | `mowing` |
-| activity is GOING_HOME | `returning` |
-| state is PAUSED or activity is STOPPED_IN_GARDEN | `paused` |
-| everything else | `docked` |
+### error
 
-### MowerState codes (uint8)
+| State | Activity | Mode | Override | error_code | Condition |
+|-------|----------|------|----------|------------|-----------|
+| FATAL_ERROR | any | any | any | any | Hardware fault |
+| ERROR | any | any | any | any | Recoverable error, check error_code |
+| WAIT_FOR_SAFETYPIN | any | any | any | any | Safety pin missing |
+| any | any | any | any | ≠ 0 | Active error code |
 
-| Value | Name |
-|-------|------|
-| 0 | OFF |
-| 1 | WAIT_FOR_SAFETYPIN |
-| 2 | STOPPED |
-| 3 | FATAL_ERROR |
-| 4 | PENDING_START |
-| 5 | PAUSED |
-| 6 | IN_OPERATION |
-| 7 | RESTRICTED |
-| 8 | ERROR |
+### mowing
 
-### MowerActivity codes (uint8)
+| State | Activity | Mode | Override | Semantic meaning |
+|-------|----------|------|----------|------------------|
+| IN_OPERATION | GOING_OUT | any | any | Leaving dock, about to mow |
+| IN_OPERATION | MOWING | AUTO / DEMO | NONE | Scheduled mow (DEMO: blades off) |
+| IN_OPERATION | MOWING | any | FORCEDMOW | Force-mow override active |
 
-| Value | Name |
-|-------|------|
-| 0 | NONE |
-| 1 | CHARGING |
-| 2 | GOING_OUT |
-| 3 | MOWING |
-| 4 | GOING_HOME |
-| 5 | PARKED |
-| 6 | STOPPED_IN_GARDEN |
+### returning
+
+| State | Activity | Mode | Override | Semantic meaning |
+|-------|----------|------|----------|------------------|
+| IN_OPERATION | GOING_HOME | any | any | Returning to dock |
+
+### paused
+
+| State | Activity | Mode | Override | Semantic meaning |
+|-------|----------|------|----------|------------------|
+| PAUSED | any | any | any | User-initiated pause |
+| STOPPED | any | any | any | Stopped, requires manual action |
+| IN_OPERATION | STOPPED_IN_GARDEN | any | any | Stuck in garden, needs manual help |
+
+### docked
+
+All of these are `docked` in HA. They are semantically distinct but HA has no sub-states for them.
+
+| State | Activity | Mode | Override | Semantic meaning |
+|-------|----------|------|----------|------------------|
+| IN_OPERATION | CHARGING | any | any | Charging after mow (low battery) |
+| RESTRICTED | PARKED | AUTO | NONE | Waiting for next scheduled start |
+| RESTRICTED | PARKED | AUTO | FORCEDPARK | Force-parked until next schedule |
+| RESTRICTED | PARKED | HOME | any | Parked forever — no schedule in use |
+| PENDING_START | any | any | any | Imminent departure (warming up) |
+| OFF | any | any | any | Mower is off |
+
+> To distinguish "waiting for schedule" from "force-parked", read `data.override` (0 = NONE, 1 = FORCEDPARK).  
+> To detect "parked forever" (HOME mode), read `data.mode` (2 = HOME).
+
+### Protocol enums
+
+**MowerState (GetState, uint8)**
+
+| Value | Name | Notes |
+|-------|------|-------|
+| 0 | OFF | |
+| 1 | WAIT_FOR_SAFETYPIN | → `error` |
+| 2 | STOPPED | requires manual action → `paused` |
+| 3 | FATAL_ERROR | → `error` |
+| 4 | PENDING_START | about to depart → `docked` |
+| 5 | PAUSED | user-paused → `paused` |
+| 6 | IN_OPERATION | see activity |
+| 7 | RESTRICTED | calendar or override park → `docked` |
+| 8 | ERROR | check error_code → `error` |
+
+**MowerActivity (GetActivity, uint8)**
+
+| Value | Name | Notes |
+|-------|------|-------|
+| 0 | NONE | |
+| 1 | CHARGING | → `docked` |
+| 2 | GOING_OUT | → `mowing` |
+| 3 | MOWING | → `mowing` |
+| 4 | GOING_HOME | → `returning` |
+| 5 | PARKED | → `docked` |
+| 6 | STOPPED_IN_GARDEN | needs manual help → `paused` |
+
+**ModeOfOperation (GetMode, uint8)**
+
+| Value | Name | Notes |
+|-------|------|-------|
+| 0 | AUTO | Normal scheduled operation |
+| 1 | MANUAL | Manual mode |
+| 2 | HOME | Parked forever, ignores schedule |
+| 3 | DEMO | Mows without blade operation |
+| 4 | POI | |
+
+**OverrideAction (GetOverride, uint8)**
+
+| Value | Name | Notes |
+|-------|------|-------|
+| 0 | NONE | No active override |
+| 1 | FORCEDPARK | Parked until next scheduled start |
+| 2 | FORCEDMOW | Mowing outside of schedule |
 
 ---
 

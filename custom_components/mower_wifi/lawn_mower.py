@@ -16,7 +16,6 @@ from .coordinator import MowerCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 # MowerState enum (GetState / StateEvent, uint8)
-# Source: alistair23/AutoMower-BLE protocol.py MowerState
 _STATE_OFF = 0
 _STATE_WAIT_FOR_SAFETYPIN = 1
 _STATE_STOPPED = 2       # stopped, requires manual action
@@ -28,7 +27,6 @@ _STATE_RESTRICTED = 7    # calendar/override park restriction
 _STATE_ERROR = 8         # error, check error code
 
 # MowerActivity enum (GetActivity / ActivityEvent, uint8)
-# Source: alistair23/AutoMower-BLE protocol.py MowerActivity
 _ACTIVITY_NONE = 0
 _ACTIVITY_CHARGING = 1
 _ACTIVITY_GOING_OUT = 2     # leaving charging station to mow
@@ -37,8 +35,16 @@ _ACTIVITY_GOING_HOME = 4    # returning to charging station
 _ACTIVITY_PARKED = 5
 _ACTIVITY_STOPPED_IN_GARDEN = 6  # stopped in garden, needs manual action
 
-# ModeOfOperation AUTO (used before SetOverrideMow)
+# ModeOfOperation enum (GetMode, uint8)
 _MODE_AUTO = 0
+_MODE_MANUAL = 1
+_MODE_HOME = 2   # parked forever, no schedule
+_MODE_DEMO = 3
+
+# OverrideAction enum (GetOverride, uint8)
+_OVERRIDE_NONE = 0
+_OVERRIDE_FORCEDPARK = 1
+_OVERRIDE_FORCEDMOW = 2
 
 
 async def async_setup_entry(
@@ -85,7 +91,11 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         state = data.state
         activity = data.activity
 
-        if (error_code and error_code != 0) or state in (_STATE_FATAL_ERROR, _STATE_ERROR):
+        if (error_code and error_code != 0) or state in (
+            _STATE_FATAL_ERROR,
+            _STATE_ERROR,
+            _STATE_WAIT_FOR_SAFETYPIN,
+        ):
             return LawnMowerActivity.ERROR
 
         if activity in (_ACTIVITY_GOING_OUT, _ACTIVITY_MOWING):
@@ -94,12 +104,13 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         if activity == _ACTIVITY_GOING_HOME:
             return LawnMowerActivity.RETURNING
 
-        if state == _STATE_PAUSED or activity == _ACTIVITY_STOPPED_IN_GARDEN:
+        if state in (_STATE_PAUSED, _STATE_STOPPED) or activity == _ACTIVITY_STOPPED_IN_GARDEN:
             return LawnMowerActivity.PAUSED
 
         if activity in (_ACTIVITY_CHARGING, _ACTIVITY_PARKED) or state in (
             _STATE_RESTRICTED,
             _STATE_PENDING_START,
+            _STATE_OFF,
         ):
             return LawnMowerActivity.DOCKED
 
