@@ -121,12 +121,16 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         self.async_write_ha_state()
 
     async def async_start_mowing(self) -> None:
-        """Start mowing: set AUTO mode, override mow, then trigger."""
         mower = self.coordinator.mower
-        await mower.send_command("SetMode", mode=_MODE_AUTO)
-        await mower.send_command("SetOverrideMow", duration=DEFAULT_MOW_DURATION)
-        # StartTrigger response is expected to return a non-OK status — handled gracefully
-        await mower.send_command("StartTrigger")
+        data = self.coordinator.data
+        if data is not None and data.state == _STATE_PAUSED:
+            # Mower is paused mid-mow — StartTrigger resumes without disturbing mode/override.
+            await mower.send_command("StartTrigger")
+        else:
+            await mower.send_command("SetMode", mode=_MODE_AUTO)
+            await mower.send_command("SetOverrideMow", duration=DEFAULT_MOW_DURATION)
+            # StartTrigger response is expected to return a non-OK status — handled gracefully
+            await mower.send_command("StartTrigger")
         await self.coordinator.async_request_refresh()
 
     async def async_dock(self) -> None:
