@@ -49,6 +49,12 @@ _MODE_NAMES: dict[int, str] = {
     3: "Demo",
 }
 
+_OVERRIDE_NAMES: dict[int, str] = {
+    0: "None",
+    1: "Forced Park",
+    2: "Forced Mow",
+}
+
 
 @dataclass(frozen=True)
 class MowerSensorEntityDescription(SensorEntityDescription):
@@ -91,6 +97,12 @@ SENSOR_DESCRIPTIONS: tuple[MowerSensorEntityDescription, ...] = (
         name="Mode",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_map=_MODE_NAMES,
+    ),
+    MowerSensorEntityDescription(
+        key="override",
+        name="Override",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_map=_OVERRIDE_NAMES,
     ),
 )
 
