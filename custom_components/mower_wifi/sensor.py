@@ -104,6 +104,12 @@ SENSOR_DESCRIPTIONS: tuple[MowerSensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_map=_OVERRIDE_NAMES,
     ),
+    MowerSensorEntityDescription(
+        key="next_start_time",
+        name="Next start",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 

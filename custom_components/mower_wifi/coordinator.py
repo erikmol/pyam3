@@ -25,6 +25,7 @@ class MowerData:
     override: int | None = None           # raw uint8 from GetOverride (OverrideAction)
     override_start_time: datetime | None = None  # local datetime when override started
     override_duration: int | None = None  # override duration in seconds
+    next_start_time: datetime | None = None  # local datetime of next scheduled start
     error_code: int | None = None
 
 
@@ -80,6 +81,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 self.mower.send_command("GetActivity"),
                 self.mower.send_command("GetMode"),
                 self.mower.send_command("GetOverride"),
+                self.mower.send_command("GetNextStartTime"),
                 self.mower.send_command("GetError"),
                 return_exceptions=True,
             )
@@ -100,7 +102,7 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 return old_val
             return cast(v) if cast else v
 
-        battery_level, is_charging, remaining_charge_time, state, activity, mode, override, error_code = results
+        battery_level, is_charging, remaining_charge_time, state, activity, mode, override, next_start_time, error_code = results
 
         self._last_contact = dt_util.utcnow()
         self._data = MowerData(
@@ -117,6 +119,9 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
                 old.override_start_time,
             ),
             override_duration=_val(override.get("duration") if isinstance(override, dict) else None, int, old.override_duration),
+            next_start_time=_val(
+                next_start_time, lambda v: datetime.utcfromtimestamp(v).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE) if v else None, old.next_start_time
+            ),
             error_code=_val(error_code, int, old.error_code),
         )
         return self._data
