@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -20,10 +20,41 @@ from .coordinator import MowerCoordinator, MowerData
 
 _LOGGER = logging.getLogger(__name__)
 
+_ACTIVITY_NAMES: dict[int, str] = {
+    0: "None",
+    1: "Charging",
+    2: "Going Out",
+    3: "Mowing",
+    4: "Going Home",
+    5: "Parked",
+    6: "Stopped in Garden",
+}
+
+_STATE_NAMES: dict[int, str] = {
+    0: "Off",
+    1: "Wait for Safety Pin",
+    2: "Stopped",
+    3: "Fatal Error",
+    4: "Pending Start",
+    5: "Paused",
+    6: "In Operation",
+    7: "Restricted",
+    8: "Error",
+}
+
+_MODE_NAMES: dict[int, str] = {
+    0: "Auto",
+    1: "Manual",
+    2: "Home",
+    3: "Demo",
+}
+
 
 @dataclass(frozen=True)
 class MowerSensorEntityDescription(SensorEntityDescription):
-    """Sensor description with optional availability check."""
+    """Sensor description with optional integer-to-string value map."""
+
+    value_map: dict[int, str] | None = field(default=None, compare=False)
 
 
 SENSOR_DESCRIPTIONS: tuple[MowerSensorEntityDescription, ...] = (
@@ -47,16 +78,19 @@ SENSOR_DESCRIPTIONS: tuple[MowerSensorEntityDescription, ...] = (
         key="activity",
         name="Activity",
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_map=_ACTIVITY_NAMES,
     ),
     MowerSensorEntityDescription(
         key="state",
         name="State",
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_map=_STATE_NAMES,
     ),
     MowerSensorEntityDescription(
         key="mode",
         name="Mode",
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_map=_MODE_NAMES,
     ),
 )
 
@@ -92,11 +126,17 @@ class MowerSensor(CoordinatorEntity[MowerCoordinator], SensorEntity):
         }
 
     @property
-    def native_value(self) -> int | None:
+    def native_value(self) -> int | str | None:
         data: MowerData | None = self.coordinator.data
         if data is None:
             return None
-        return getattr(data, self.entity_description.key, None)
+        value = getattr(data, self.entity_description.key, None)
+        if value is None:
+            return None
+        value_map = self.entity_description.value_map
+        if value_map is not None:
+            return value_map.get(value, str(value))
+        return value
 
     @property
     def available(self) -> bool:
