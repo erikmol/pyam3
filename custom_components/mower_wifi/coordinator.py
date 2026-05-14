@@ -22,7 +22,9 @@ class MowerData:
     state: int | None = None     # raw uint8 from GetState
     activity: int | None = None  # raw uint8 from GetActivity
     mode: int | None = None      # raw uint8 from GetMode
-    override: int | None = None  # raw uint8 from GetOverride (OverrideAction)
+    override: int | None = None           # raw uint8 from GetOverride (OverrideAction)
+    override_start_time: datetime | None = None  # local datetime when override started
+    override_duration: int | None = None  # override duration in seconds
     error_code: int | None = None
 
 
@@ -109,6 +111,12 @@ class MowerCoordinator(DataUpdateCoordinator[MowerData]):
             activity=_val(activity, int, old.activity),
             mode=_val(mode, int, old.mode),
             override=_val(override.get("action") if isinstance(override, dict) else override, int, old.override),
+            override_start_time=_val(
+                override.get("startTime") if isinstance(override, dict) else None,
+                lambda v: datetime.utcfromtimestamp(v).replace(tzinfo=dt_util.DEFAULT_TIME_ZONE) if v else None,
+                old.override_start_time,
+            ),
+            override_duration=_val(override.get("duration") if isinstance(override, dict) else None, int, old.override_duration),
             error_code=_val(error_code, int, old.error_code),
         )
         return self._data

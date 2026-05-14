@@ -151,6 +151,18 @@ class MowerSensor(CoordinatorEntity[MowerCoordinator], SensorEntity):
         return value
 
     @property
+    def extra_state_attributes(self) -> dict | None:
+        if self.entity_description.key != "override":
+            return None
+        data: MowerData | None = self.coordinator.data
+        if data is None:
+            return None
+        return {
+            "start_time": data.override_start_time,
+            "duration_seconds": data.override_duration,
+        }
+
+    @property
     def available(self) -> bool:
         if not self.coordinator.connection_available:
             return False
