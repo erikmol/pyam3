@@ -134,10 +134,16 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         await self.coordinator.async_request_refresh()
 
     async def async_dock(self) -> None:
-        """Park until next scheduled start, then trigger."""
+        """Park until next scheduled start; only trigger if mower is out."""
         mower = self.coordinator.mower
+        data = self.coordinator.data
+        already_home = data is not None and data.activity in (
+            _ACTIVITY_CHARGING,
+            _ACTIVITY_PARKED,
+        )
         await mower.send_command("SetOverrideParkUntilNextStart")
-        await mower.send_command("StartTrigger")
+        if not already_home:
+            await mower.send_command("StartTrigger")
         await self.coordinator.async_request_refresh()
 
     async def async_pause(self) -> None:
