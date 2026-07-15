@@ -5,6 +5,7 @@ import logging
 from typing import Callable
 
 from pyam3.protocol.base import create_command
+from pyam3.protocol.common import crc
 from pyam3.protocol.extended import ExtendedProtocol
 from pyam3.protocol.linked import LinkedProtocol
 
@@ -130,6 +131,7 @@ class Mower(ABC):
     def __init__(self) -> None:
         # Extended protocol: transaction_id → Future resolving to raw response bytes
         self._pending: dict[int, asyncio.Future[bytearray]] = {}
+        self._next_tid: int = 1
         # Simple protocol has no transaction ID — serialise with a lock
         self._simple_lock: asyncio.Lock = asyncio.Lock()
         self._simple_future: asyncio.Future[bytearray] | None = None
@@ -295,7 +297,15 @@ class Mower(ABC):
         timeout: float,
         retries: int,
     ) -> bytearray | None:
-        tid = command.transaction_id
+        # Assign a unique TID (1-255), skipping any already in-flight.
+        tid = self._next_tid
+        while tid in self._pending:
+            tid = (tid % 255) + 1
+        self._next_tid = (tid % 255) + 1
+        # Patch the TID into the pre-built request frame and recompute CRC.
+        request[4] = tid
+        request[-2] = crc(request[1:-2])
+
         loop = asyncio.get_running_loop()
 
         for attempt in range(retries):
