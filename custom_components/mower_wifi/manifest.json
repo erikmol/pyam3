@@ -1,12 +1,12 @@
 {
   "domain": "mower_wifi",
   "name": "Automower WiFi",
-  "version": "0.1.1",
-  "requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@main"],
-  "dependencies": [],
   "codeowners": ["@erikmol"],
   "config_flow": true,
-  "iot_class": "local_polling",
+  "dependencies": [],
   "documentation": "https://github.com/erikmol/pyam3/blob/main/docs/ha_component.md",
-  "issue_tracker": "https://github.com/erikmol/pyam3/issues"
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/erikmol/pyam3/issues",
+  "requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@main"],
+  "version": "0.1.1"
 }
