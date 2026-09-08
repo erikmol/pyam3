@@ -4,27 +4,47 @@
 
 ## Setup
 
-### 1. Install the library
+### Option A: Install via HACS (recommended)
 
-From the repo root:
+`pyam3` isn't published on PyPI, so the integration's `manifest.json`
+declares its `requirements` entry as a direct git reference to this same
+repo:
 
-```bash
-pip install -e .
+```json
+"requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@main"]
 ```
 
-Or add to HA's `requirements.txt` / HACS config using a git URL.
+Home Assistant installs that git ref automatically when the integration is
+set up — no separate `pip install` step is needed.
 
-### 2. Copy the component
+> Once you start cutting GitHub releases for this repo, change `@main` to
+> `@vX.Y.Z` (matching the release tag) so the pinned `pyam3` version tracks
+> a fixed, reproducible commit instead of a moving branch.
 
-Copy `custom_components/mower_wifi/` into your HA config directory:
+1. In HACS, open the 3-dot menu → **Custom repositories**
+2. Add `https://github.com/erikmol/pyam3` as an **Integration**
+3. Install **Automower WiFi** from HACS
+4. Restart Home Assistant
 
-```
-config/
-  custom_components/
-    mower_wifi/
-```
+Then skip to [Add the integration](#add-the-integration) below.
 
-### 3. Add the integration
+### Option B: Manual install
+
+1. From the repo root, install the library:
+
+   ```bash
+   pip install -e .
+   ```
+
+2. Copy `custom_components/mower_wifi/` into your HA config directory:
+
+   ```
+   config/
+     custom_components/
+       mower_wifi/
+   ```
+
+### Add the integration
 
 1. Restart Home Assistant
 2. Go to **Settings → Devices & Services → Add Integration**
