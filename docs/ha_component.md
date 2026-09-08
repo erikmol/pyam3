@@ -11,7 +11,7 @@ declares its `requirements` entry as a direct git reference to this same
 repo:
 
 ```json
-"requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@main"]
+"requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@main"]
 ```
 
 Home Assistant installs that git ref automatically when the integration is
