@@ -16,6 +16,12 @@ Commands are sent using a shared async client across both transports, with autom
 pip install -e .
 ```
 
+To use the Home Assistant custom component instead, install it via HACS (as
+a custom repository) or manually — see
+[docs/ha_component.md](docs/ha_component.md). `pyam3` isn't on PyPI, so the
+component's `manifest.json` pulls it directly from this repo; HA installs it
+automatically, no separate `pip install` needed.
+
 ## Quick start
 
 ### WiFi (via ESP32 bridge)
