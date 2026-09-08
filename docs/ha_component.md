@@ -6,15 +6,20 @@
 
 ### Option A: Install via HACS (recommended)
 
-`pyam3` isn't published on PyPI, so the integration's `manifest.json` pins its
-`requirements` entry to this same repo, e.g.:
+`pyam3` isn't published on PyPI, so the integration's `manifest.json`
+declares its `requirements` entry as a direct git reference to this same
+repo:
 
 ```json
-"requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@v0.1.1"]
+"requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@main"]
 ```
 
-Home Assistant installs that pinned git ref automatically when the
-integration is set up — no separate `pip install` step is needed.
+Home Assistant installs that git ref automatically when the integration is
+set up — no separate `pip install` step is needed.
+
+> Once you start cutting GitHub releases for this repo, change `@main` to
+> `@vX.Y.Z` (matching the release tag) so the pinned `pyam3` version tracks
+> a fixed, reproducible commit instead of a moving branch.
 
 1. In HACS, open the 3-dot menu → **Custom repositories**
 2. Add `https://github.com/erikmol/pyam3` as an **Integration**

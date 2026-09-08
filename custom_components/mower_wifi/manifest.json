@@ -2,7 +2,7 @@
   "domain": "mower_wifi",
   "name": "Automower WiFi",
   "version": "0.1.1",
-  "requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@v0.1.1"],
+  "requirements": ["pyam3 @ git+https://github.com/erikmol/pyam3.git@main"],
   "dependencies": [],
   "codeowners": ["@erikmol"],
   "config_flow": true,
