@@ -11,15 +11,16 @@ declares its `requirements` entry as a direct git reference to this same
 repo:
 
 ```json
-"requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@main"]
+"requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@v0.2.0"]
 ```
 
 Home Assistant installs that git ref automatically when the integration is
 set up — no separate `pip install` step is needed.
 
-> Once you start cutting GitHub releases for this repo, change `@main` to
-> `@vX.Y.Z` (matching the release tag) so the pinned `pyam3` version tracks
-> a fixed, reproducible commit instead of a moving branch.
+> The ref is pinned to the release tag (`@vX.Y.Z`) so `pyam3` tracks a
+> fixed, reproducible commit. When cutting a release, bump `version` in
+> `manifest.json`, update this ref to the new tag, and create the matching
+> GitHub release — the tag must exist before HACS users install it.
 
 1. In HACS, open the 3-dot menu → **Custom repositories**
 2. Add `https://github.com/erikmol/pyam3` as an **Integration**
