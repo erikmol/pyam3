@@ -63,12 +63,16 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         LawnMowerEntityFeature.START_MOWING
         | LawnMowerEntityFeature.DOCK
         | LawnMowerEntityFeature.PAUSE
+        | LawnMowerEntityFeature.STOP
     )
     _attr_has_entity_name = True
     _attr_name = None  # use device name as entity name
 
     def __init__(self, coordinator: MowerCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
+        # Set by async_stop: the mower is paused but its task was cancelled,
+        # so a bare StartTrigger must not be used to "resume" it.
+        self._task_cancelled = False
         self._attr_unique_id = entry.entry_id
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
@@ -104,7 +108,10 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
         if activity == _ACTIVITY_GOING_HOME:
             return LawnMowerActivity.RETURNING
 
-        if state in (_STATE_PAUSED, _STATE_STOPPED) or activity == _ACTIVITY_STOPPED_IN_GARDEN:
+        if state == _STATE_STOPPED or activity == _ACTIVITY_STOPPED_IN_GARDEN:
+            return LawnMowerActivity.IDLE
+
+        if state == _STATE_PAUSED:
             return LawnMowerActivity.PAUSED
 
         if activity in (_ACTIVITY_CHARGING, _ACTIVITY_PARKED) or state in (
@@ -123,14 +130,16 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
     async def async_start_mowing(self) -> None:
         mower = self.coordinator.mower
         data = self.coordinator.data
-        if data is not None and data.state == _STATE_PAUSED:
+        if data is not None and data.state == _STATE_PAUSED and not self._task_cancelled:
             # Mower is paused mid-mow — StartTrigger resumes without disturbing mode/override.
             await mower.send_command("StartTrigger")
         else:
+            # Fresh start, including after async_stop cancelled the previous task.
             await mower.send_command("SetMode", mode=_MODE_AUTO)
             await mower.send_command("SetOverrideMow", duration=DEFAULT_MOW_DURATION)
             # StartTrigger response is expected to return a non-OK status — handled gracefully
             await mower.send_command("StartTrigger")
+        self._task_cancelled = False
         await self.coordinator.async_request_refresh()
 
     async def async_dock(self) -> None:
@@ -142,10 +151,19 @@ class MowerLawnMower(CoordinatorEntity[MowerCoordinator], LawnMowerEntity):
             _ACTIVITY_PARKED,
         )
         await mower.send_command("SetOverrideParkUntilNextStart")
+        self._task_cancelled = False
         if not already_home:
             await mower.send_command("StartTrigger")
         await self.coordinator.async_request_refresh()
 
     async def async_pause(self) -> None:
         await self.coordinator.mower.send_command("Pause")
+        await self.coordinator.async_request_refresh()
+
+    async def async_stop(self) -> None:
+        """Halt in place and cancel the current task; do not return to dock."""
+        mower = self.coordinator.mower
+        await mower.send_command("Pause")
+        await mower.send_command("ClearOverride")
+        self._task_cancelled = True
         await self.coordinator.async_request_refresh()
