@@ -11,15 +11,16 @@ declares its `requirements` entry as a direct git reference to this same
 repo:
 
 ```json
-"requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@main"]
+"requirements": ["pyam3@git+https://github.com/erikmol/pyam3.git@v0.2.0"]
 ```
 
 Home Assistant installs that git ref automatically when the integration is
 set up — no separate `pip install` step is needed.
 
-> Once you start cutting GitHub releases for this repo, change `@main` to
-> `@vX.Y.Z` (matching the release tag) so the pinned `pyam3` version tracks
-> a fixed, reproducible commit instead of a moving branch.
+> The ref is pinned to the release tag (`@vX.Y.Z`) so `pyam3` tracks a
+> fixed, reproducible commit. When cutting a release, bump `version` in
+> `manifest.json`, update this ref to the new tag, and create the matching
+> GitHub release — the tag must exist before HACS users install it.
 
 1. In HACS, open the 3-dot menu → **Custom repositories**
 2. Add `https://github.com/erikmol/pyam3` as an **Integration**
@@ -60,7 +61,7 @@ The bridge must be set up first — see [esp32_bridge.md](esp32_bridge.md).
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| Mower | `lawn_mower` | Main control entity (start / dock / pause) |
+| Mower | `lawn_mower` | Main control entity (start / dock / pause / stop) |
 | Battery | `sensor` | Battery level (%) |
 | Remaining charge time | `sensor` | Minutes until fully charged (available only while charging) |
 | Activity | `sensor` | Raw activity code (diagnostic) |
@@ -97,13 +98,20 @@ The `lawn_mower` entity maps the combination of `state`, `activity`, `mode`, `ov
 |-------|----------|------|----------|------------------|
 | IN_OPERATION | GOING_HOME | any | any | Returning to dock |
 
+### idle
+
+Stopped in the garden — neither docked nor paused (requires Home Assistant 2026.10+).
+
+| State | Activity | Mode | Override | Semantic meaning |
+|-------|----------|------|----------|------------------|
+| STOPPED | any | any | any | Stopped, requires manual action |
+| any | STOPPED_IN_GARDEN | any | any | Stuck in garden, needs manual help |
+
 ### paused
 
 | State | Activity | Mode | Override | Semantic meaning |
 |-------|----------|------|----------|------------------|
-| PAUSED | any | any | any | User-initiated pause |
-| STOPPED | any | any | any | Stopped, requires manual action |
-| IN_OPERATION | STOPPED_IN_GARDEN | any | any | Stuck in garden, needs manual help |
+| PAUSED | any | any | any | User-initiated pause (also after the HA `stop` action) |
 
 ### docked
 
@@ -129,7 +137,7 @@ All of these are `docked` in HA. They are semantically distinct but HA has no su
 |-------|------|-------|
 | 0 | OFF | |
 | 1 | WAIT_FOR_SAFETYPIN | → `error` |
-| 2 | STOPPED | requires manual action → `paused` |
+| 2 | STOPPED | requires manual action → `idle` |
 | 3 | FATAL_ERROR | → `error` |
 | 4 | PENDING_START | about to depart → `docked` |
 | 5 | PAUSED | user-paused → `paused` |
@@ -147,7 +155,7 @@ All of these are `docked` in HA. They are semantically distinct but HA has no su
 | 3 | MOWING | → `mowing` |
 | 4 | GOING_HOME | → `returning` |
 | 5 | PARKED | → `docked` |
-| 6 | STOPPED_IN_GARDEN | needs manual help → `paused` |
+| 6 | STOPPED_IN_GARDEN | needs manual help → `idle` |
 
 **ModeOfOperation (GetMode, uint8)**
 
@@ -176,6 +184,9 @@ All of these are `docked` in HA. They are semantically distinct but HA has no su
 | Start mowing | `SetMode(mode=AUTO)` → `SetOverrideMow(duration=14400)` → `StartTrigger` |
 | Dock | `SetOverrideParkUntilNextStart` → `StartTrigger` |
 | Pause | `Pause` |
+| Stop | `Pause` → `ClearOverride` |
+
+**Stop** halts the mower where it is and cancels the current task (any force-mow override) without returning to dock. The mower stays paused; the next **Start mowing** always runs the full start sequence instead of resuming. The integration requires Home Assistant 2026.10 or newer for the `stop` action and the `idle` activity.
 
 `StartTrigger` is expected to return a non-OK response — this is handled gracefully.
 
